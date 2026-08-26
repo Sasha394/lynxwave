@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.client.api.framesync.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "GameRendererMixin",
+    "InGameHudMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

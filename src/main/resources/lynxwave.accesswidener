@@ -1,0 +1,63 @@
+accessWidener v1  named
+
+accessible method net/minecraft/entity/Entity adjustMovementForCollisions (Lnet/minecraft/util/math/Vec3d;)Lnet/minecraft/util/math/Vec3d;
+accessible field net/minecraft/client/render/item/HeldItemRenderer equipProgressMainHand F
+mutable field net/minecraft/client/MinecraftClient session Lnet/minecraft/client/session/Session;
+accessible field net/minecraft/client/network/ClientPlayerEntity lastSprinting Z
+accessible field net/minecraft/client/MinecraftClient itemUseCooldown I
+accessible field net/minecraft/entity/Entity velocity Lnet/minecraft/util/math/Vec3d;
+accessible field net/minecraft/entity/player/PlayerEntity abilities Lnet/minecraft/entity/player/PlayerAbilities;
+accessible field net/minecraft/entity/player/ItemCooldownManager entries Ljava/util/Map;
+accessible field net/minecraft/entity/player/ItemCooldownManager tick I
+accessible field net/minecraft/entity/Entity movementMultiplier Lnet/minecraft/util/math/Vec3d;
+accessible field net/minecraft/network/packet/c2s/play/PlayerInteractEntityC2SPacket entityId I
+accessible field net/minecraft/network/packet/c2s/play/PlayerInteractEntityC2SPacket type Lnet/minecraft/network/packet/c2s/play/PlayerInteractEntityC2SPacket$InteractTypeHandler;
+accessible field net/minecraft/entity/Entity onGround Z
+accessible field net/minecraft/client/MinecraftClient session Lnet/minecraft/client/session/Session;
+accessible field net/minecraft/client/network/ClientPlayerEntity ticksLeftToDoubleTapSprint I
+accessible field net/minecraft/client/MinecraftClient renderTickCounter Lnet/minecraft/client/render/RenderTickCounter$Dynamic;
+accessible field net/minecraft/entity/Entity world Lnet/minecraft/world/World;
+accessible field net/minecraft/block/AbstractBlock slipperiness F
+accessible field net/minecraft/client/option/KeyBinding pressed Z
+accessible field net/minecraft/client/network/ClientPlayerInteractionManager currentBreakingProgress F
+accessible field net/minecraft/network/packet/s2c/play/BossBarS2CPacket uuid Ljava/util/UUID;
+accessible field net/minecraft/network/packet/s2c/play/BossBarS2CPacket action Lnet/minecraft/network/packet/s2c/play/BossBarS2CPacket$Action;
+accessible field net/minecraft/network/packet/s2c/play/BossBarS2CPacket$AddAction name Lnet/minecraft/text/Text;
+accessible field net/minecraft/network/packet/s2c/play/BossBarS2CPacket$Type parser Lnet/minecraft/network/codec/PacketDecoder;
+accessible field net/minecraft/client/gui/screen/ingame/AnvilScreen nameField Lnet/minecraft/client/gui/widget/TextFieldWidget;
+accessible field net/minecraft/world/World blockEntityTickers Ljava/util/List;
+accessible field net/minecraft/client/option/GameOptions mainArm Lnet/minecraft/client/option/SimpleOption;
+accessible field net/minecraft/client/gui/screen/ingame/HandledScreen x I
+accessible field net/minecraft/client/gui/screen/ingame/HandledScreen y I
+accessible field net/minecraft/client/gui/screen/ingame/HandledScreen backgroundWidth I
+accessible field net/minecraft/client/gui/screen/ingame/HandledScreen backgroundHeight I
+accessible field net/minecraft/entity/LivingEntity jumpingCooldown I
+accessible field net/minecraft/entity/LivingEntity jumping Z
+accessible field net/minecraft/entity/Entity fluidHeight Lit/unimi/dsi/fastutil/objects/Object2DoubleMap;
+accessible field net/minecraft/entity/Entity submergedFluidTag Ljava/util/Set;
+accessible field net/minecraft/entity/Entity dimensions Lnet/minecraft/entity/EntityDimensions;
+accessible field net/minecraft/client/gui/hud/BossBarHud bossBars Ljava/util/Map;
+accessible field net/minecraft/client/model/ModelPart cuboids Ljava/util/List;
+
+accessible method net/minecraft/network/packet/c2s/play/PlayerInteractEntityC2SPacket$InteractTypeHandler getType ()Lnet/minecraft/network/packet/c2s/play/PlayerInteractEntityC2SPacket$InteractType;
+accessible method net/minecraft/client/network/ClientPlayerInteractionManager syncSelectedSlot ()V
+accessible method net/minecraft/entity/LivingEntity getJumpVelocity ()F
+accessible method net/minecraft/client/input/KeyboardInput getMovementMultiplier (ZZ)F
+accessible method net/minecraft/client/network/ClientPlayerInteractionManager sendSequencedPacket (Lnet/minecraft/client/world/ClientWorld;Lnet/minecraft/client/network/SequencedPacketCreator;)V
+accessible method net/minecraft/client/gui/screen/ingame/HandledScreen getSlotAt (DD)Lnet/minecraft/screen/slot/Slot;
+accessible method net/minecraft/client/MinecraftClient doAttack ()Z
+accessible method net/minecraft/network/packet/s2c/play/BossBarS2CPacket$Action getType ()Lnet/minecraft/network/packet/s2c/play/BossBarS2CPacket$Type;
+accessible method net/minecraft/client/gui/hud/PlayerListHud$ScoreDisplayEntry <init> (Lnet/minecraft/text/Text;ILnet/minecraft/text/Text;I)V
+accessible method net/minecraft/client/network/PlayerListEntry setGameMode (Lnet/minecraft/world/GameMode;)V
+accessible method net/minecraft/client/render/GameRenderer getFov (Lnet/minecraft/client/render/Camera;FZ)F
+accessible method net/minecraft/entity/Entity movementInputToVelocity (Lnet/minecraft/util/math/Vec3d;FF)Lnet/minecraft/util/math/Vec3d;
+accessible method net/minecraft/client/render/RenderLayer of (Ljava/lang/String;Lnet/minecraft/client/render/RenderSetup;)Lnet/minecraft/client/render/RenderLayer;
+
+accessible class net/minecraft/entity/player/ItemCooldownManager$Entry
+accessible class net/minecraft/network/packet/c2s/play/PlayerInteractEntityC2SPacket$InteractType
+accessible class net/minecraft/network/packet/s2c/play/BossBarS2CPacket$Type
+accessible class net/minecraft/network/packet/s2c/play/BossBarS2CPacket$AddAction
+accessible class net/minecraft/client/gui/hud/PlayerListHud$ScoreDisplayEntry
+accessible class net/minecraft/client/gui/hud/PlayerListHud$Heart
+accessible class net/minecraft/client/option/GameOptions$Visitor
+accessible class net/minecraft/client/gui/hud/ChatHud$RemovalQueuedMessage

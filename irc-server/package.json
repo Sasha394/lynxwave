@@ -1,0 +1,13 @@
+{
+  "name": "lynxwave-irc-server",
+  "version": "1.0.0",
+  "description": "Local IRC WebSocket server for LynxWave/NexusWarden",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

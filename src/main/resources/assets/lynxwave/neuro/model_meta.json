@@ -1,0 +1,30 @@
+{
+  "profiles_used": 1,
+  "real_samples": 2866,
+  "synthetic_samples": 90000,
+  "total_samples": 92866,
+  "yaw_rmse": 1.6495083119764768,
+  "pitch_rmse": 0.6246983503618296,
+  "features": [
+    "targetDeltaYaw",
+    "targetDeltaPitch",
+    "distance",
+    "timeSinceLastHitMs",
+    "fallDistance",
+    "diffY",
+    "prevTargetYaw",
+    "prevTargetPitch",
+    "prevYaw",
+    "prevPitch",
+    "prevDistance",
+    "playerSpeed",
+    "targetSpeed",
+    "prevPlayerSpeed",
+    "prevTargetSpeed",
+    "bodyHeadGap",
+    "playerOnGround",
+    "playerSprinting",
+    "targetOnGround",
+    "targetSprinting"
+  ]
+}

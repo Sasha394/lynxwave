@@ -1,0 +1,141 @@
+plugins {
+    id 'fabric-loom' version '1.16.3'
+    id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+    mavenCentral()
+    maven { url = uri('https://maven.fabricmc.net/') }
+    maven { url = uri('https://jitpack.io') }
+    maven { url = uri('https://maven.ladysnake.org/releases') }
+    maven { url = uri('https://maven.ladysnake.org/snapshots') }
+    maven { url = uri('https://maven.terraformersmc.com/releases/') }
+    flatDir { dirs 'libs' }
+}
+
+configurations {
+    embed
+}
+
+loom {
+    accessWidenerPath = file("src/main/resources/lynxwave.accesswidener")
+}
+repositories {
+    mavenCentral()
+    maven { url = "https://repo.viaversion.com/" }
+    maven { url = "https://maven.lenni0451.net/everything/" }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+    modCompileOnly "com.terraformersmc:modmenu:17.0.0"
+    modImplementation(include("org.fusesource.jansi:jansi:2.4.0"))
+    implementation "com.github.JnCrMx:discord-game-sdk4j:v1.0.0"
+    embed("com.github.JnCrMx:discord-game-sdk4j:v1.0.0") {
+        transitive = false
+    }
+    compileOnly 'org.projectlombok:lombok:1.18.30'
+    annotationProcessor 'org.projectlombok:lombok:1.18.30'
+    testCompileOnly 'org.projectlombok:lombok:1.18.30'
+    testAnnotationProcessor 'org.projectlombok:lombok:1.18.30'
+    implementation files('libs/MediaPlayerInfo-0.1.0.jar')
+    implementation include("ai.catboost:catboost-prediction:1.2.8")
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:2.1.20"
+    include "org.jetbrains.kotlin:kotlin-stdlib:2.1.20"
+    implementation "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm:1.11.0"
+    include "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm:1.11.0"
+    implementation "com.github.hypfvieh:dbus-java-core:4.2.1"
+    include "com.github.hypfvieh:dbus-java-core:4.2.1"
+    implementation "com.github.hypfvieh:dbus-java-transport-native-unixsocket:4.2.1"
+    include "com.github.hypfvieh:dbus-java-transport-native-unixsocket:4.2.1"
+}
+
+def resourceProperties = [
+        "version"          : project.version,
+        "minecraft_version": project.minecraft_version,
+        "loader_version"   : project.loader_version,
+        "fabric_version"   : project.fabric_version
+]
+
+processResources {
+    inputs.properties(resourceProperties)
+    filteringCharset = "UTF-8"
+
+    filesMatching("fabric.mod.json") {
+        expand resourceProperties
+    }
+}
+
+def targetJavaVersion = 21
+tasks.withType(JavaCompile).configureEach {
+    it.options.encoding = "UTF-8"
+    if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
+        it.options.release.set(targetJavaVersion)
+    }
+}
+
+java {
+    def javaVersion = JavaVersion.toVersion(targetJavaVersion)
+    if (JavaVersion.current() < javaVersion) {
+        toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
+    }
+    withSourcesJar()
+}
+
+tasks.named('jar') {
+    doFirst {
+        def lib = file('libs/MediaPlayerInfo-0.1.0.jar')
+        if (!lib.exists()) {
+            throw new GradleException("Missing libs/MediaPlayerInfo-0.1.0.jar")
+        }
+    }
+
+    from({
+        def lib = file('libs/MediaPlayerInfo-0.1.0.jar')
+        [zipTree(lib)]
+    }) {
+        exclude 'fabric.mod.json',
+                'META-INF/mods.toml',
+                'META-INF/MANIFEST.MF',
+                'META-INF/*.SF',
+                'META-INF/*.DSA',
+                'META-INF/*.RSA',
+                'module-info.class'
+    }
+
+    from({
+        configurations.embed.collect { zipTree(it) }
+    }) {
+        exclude 'fabric.mod.json',
+                'META-INF/mods.toml',
+                'META-INF/MANIFEST.MF',
+                'META-INF/*.SF',
+                'META-INF/*.DSA',
+                'META-INF/*.RSA',
+                'module-info.class'
+    }
+
+    from("LICENSE") {
+        rename { "${it}_${base.archivesName.get()}" }
+    }
+}
+
+publishing {
+    publications {
+        create("mavenJava", MavenPublication) {
+            artifactId = project.archives_base_name
+            from components.java
+        }
+    }
+    repositories {}
+}

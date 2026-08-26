@@ -1,0 +1,20 @@
+{
+  "framesync.config.title": "Настройки FrameSync",
+  "framesync.config.monitor_hz": "Частота монитора: %d Гц",
+  "framesync.config.enable_render_limit": "Ограничивать частоту кадров",
+  "framesync.config.enabled": "Включено",
+  "framesync.config.disabled": "Выключено",
+  "framesync.config.auto_detect": "Автоопределение частоты монитора",
+  "framesync.config.auto_on": "Авто",
+  "framesync.config.auto_off": "Вручную",
+  "framesync.config.min_fps": "Минимальный FPS: %d",
+  "framesync.config.fps_indicator": "Показывать индикатор FPS",
+  "framesync.config.show": "Показывать",
+  "framesync.config.hide": "Скрывать",
+  "framesync.config.lowend_mode": "Режим для слабого ПК",
+  "framesync.config.lowend_on": "Плавность",
+  "framesync.config.lowend_off": "Производительность",
+  "framesync.config.reset_defaults": "Сбросить настройки",
+  "framesync.key.config": "Открыть настройки FrameSync",
+  "key.category.framesync.controls": "FrameSync"
+}
