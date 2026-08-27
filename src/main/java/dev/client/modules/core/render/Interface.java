@@ -324,6 +324,11 @@ public class Interface extends Module {
     }
 
     @Subscribe
+    public void onDraw3D(RenderEvent.Draw3D event) {
+        if (elements.isSelected("MusicPlayer")) musicPlayer.onRender3D(event);
+    }
+
+    @Subscribe
     public void onDraw2D(RenderEvent.Draw2D event) {
         if (hudAnimating && hudAnimation.getDirection() == Direction.BACKWARDS && hudAnimation.isDone()) {
             hudAnimating = false;

@@ -15,6 +15,7 @@ import dev.client.api.nullcry.render.core.renderers.core.handflame.HandShaderRen
 import dev.client.modules.core.render.CustomWorld;
 import dev.client.modules.core.render.NoRender;
 import dev.client.modules.core.render.PostEffectRenderer;
+import dev.client.modules.core.render.Rain;
 import dev.client.modules.core.render.ShaderHand;
 import dev.client.modules.core.render.Zoom;
 import com.mojang.blaze3d.textures.GpuTexture;
@@ -186,6 +187,15 @@ public abstract class GameRendererMixins {
             Draw3DUtil.setLastProjMat(RenderSystem.getProjectionMatrix());
             Draw3DUtil.setLastWorldSpaceMatrix(ms.peek());
             Draw3DUtil.onDraw3D(new RenderEvent.Draw3D(ms, tickCounter));
+        }
+
+        Rain rain = Rain.INSTANCE;
+        if (rain != null && rain.isEnabled()) {
+            rain.renderWetSurfaceFrame(
+                    client.gameRenderer.getCamera(),
+                    viewMatrix,
+                    RenderSystem.getProjectionMatrix()
+            );
         }
 
         CustomWorld customWorld = CustomWorld.INSTANCE;

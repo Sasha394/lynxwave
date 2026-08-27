@@ -17,21 +17,28 @@ import dev.client.api.nullcry.render.core.builders.Builder;
 import dev.client.api.nullcry.render.core.builders.states.QuadColorState;
 import dev.client.api.nullcry.render.core.builders.states.QuadRadiusState;
 import dev.client.api.nullcry.render.core.builders.states.SizeState;
+import dev.client.api.nullcry.modules.settings.CheckBox;
 import dev.client.api.nullcry.modules.settings.Slider;
 import dev.client.api.nullcry.uiClient.clickGui.api.setting.Setting;
 import dev.client.api.nullcry.uiClient.clickGui.api.setting.SettingProvider;
 import dev.client.api.nullcry.uiClient.draggables.HelperElements;
 import dev.client.api.nullcry.uiClient.draggables.IHelper;
+import dev.client.api.nullcry.uiClient.draggables.core.music.LrcLibClient;
+import dev.client.api.nullcry.uiClient.draggables.core.music.LyricLine;
+import dev.client.api.nullcry.uiClient.draggables.core.music.LyricLineSplitter;
+import dev.client.api.nullcry.uiClient.draggables.core.music.LyricParticle3D;
 import dev.client.api.nullcry.uiClient.draggables.settings.DraggableSettingsPanel;
 import dev.client.modules.core.render.Interface;
 import dev.redstones.mediaplayerinfo.IMediaSession;
 import dev.redstones.mediaplayerinfo.MediaInfo;
 import dev.redstones.mediaplayerinfo.MediaPlayerInfo;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.render.Camera;
 import net.minecraft.client.texture.NativeImage;
 import net.minecraft.client.texture.NativeImageBackedTexture;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.math.Vec3d;
 import org.lwjgl.BufferUtils;
 
 import java.awt.*;
@@ -40,16 +47,27 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class MusicPlayer implements IHelper, ClientApi, SettingProvider {
 
     private final DraggableHandler drag;
     private final List<Setting> settings = new ArrayList<>();
     public final Slider scale = new Slider("Масштаб", () -> true).set(50, 100, 5).applyDefault(100).register(this);
+    public final CheckBox lyrics3d = new CheckBox("3D-текст", () -> true).defaultValue(false).register(this);
     public final CompactAnimation alpha = new CompactAnimation(Easing.EASE_OUT_CUBIC, 400);
     private final ExecutorService io = Executors.newSingleThreadExecutor();
+
+    private static final int MAX_LYRIC_PARTICLES = 3;
+    private final List<LyricParticle3D> activeLyrics = new ArrayList<>();
+    private List<LyricLine> lyricTimeline = List.of();
+    private String lyricTrackKey = "";
+    private int lyricIndex;
+    private long predictedPositionMs;
+    private long lastLyricsUpdateMs;
 
     @Override
     public DraggableHandler draggable() {
@@ -141,6 +159,22 @@ public class MusicPlayer implements IHelper, ClientApi, SettingProvider {
                 }
 
             });
+        }
+
+        updateLyrics();
+    }
+
+    public void onRender3D(RenderEvent.Draw3D event) {
+        if (!lyrics3d.getEnabled() || mc.player == null || mc.world == null || activeLyrics.isEmpty()) return;
+
+        long now = System.currentTimeMillis();
+        activeLyrics.removeIf(lyric -> lyric.isDead(now));
+        if (activeLyrics.isEmpty()) return;
+
+        Camera camera = mc.gameRenderer.getCamera();
+        int color = Interface.INSTANCE.getMainColor();
+        for (LyricParticle3D lyric : activeLyrics) {
+            lyric.render(event.getMatrices(), camera, color, now);
         }
     }
 
@@ -389,6 +423,139 @@ public class MusicPlayer implements IHelper, ClientApi, SettingProvider {
             session.previous();
         } catch (Throwable ignored) {
         }
+    }
+
+    private void updateLyrics() {
+        if (!lyrics3d.getEnabled()) {
+            clearLyrics();
+            return;
+        }
+
+        String title = media.getTitle() == null ? "" : media.getTitle().trim();
+        String artist = media.getArtist() == null ? "" : media.getArtist().trim();
+        if (session == null || title.isEmpty()) {
+            clearLyrics();
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        long reportedPositionMs = Math.max(0L, media.getPosition()) * 1_000L;
+        String trackKey = (title + " - " + artist).toLowerCase(Locale.ROOT);
+        if (!trackKey.equals(lyricTrackKey)) {
+            startLyricsTrack(trackKey, title, artist, reportedPositionMs, now);
+            return;
+        }
+
+        long deltaMs = lastLyricsUpdateMs == 0L ? 0L : Math.max(0L, now - lastLyricsUpdateMs);
+        lastLyricsUpdateMs = now;
+        if (Math.abs(reportedPositionMs - predictedPositionMs) > 1_500L) {
+            predictedPositionMs = reportedPositionMs;
+            resyncLyrics(predictedPositionMs, now);
+        } else if (media.getPlaying()) {
+            predictedPositionMs += deltaMs;
+        }
+        long durationMs = Math.max(0L, media.getDuration()) * 1_000L;
+        if (durationMs > 0L) predictedPositionMs = Math.min(predictedPositionMs, durationMs);
+        advanceLyrics(predictedPositionMs, now);
+        activeLyrics.removeIf(lyric -> lyric.isDead(now));
+    }
+
+    private void startLyricsTrack(String trackKey, String title, String artist, long positionMs, long now) {
+        lyricTrackKey = trackKey;
+        lyricTimeline = List.of();
+        lyricIndex = 0;
+        activeLyrics.clear();
+        predictedPositionMs = positionMs;
+        lastLyricsUpdateMs = now;
+
+        LrcLibClient.fetchLyricsAsync(title, artist).whenComplete((lines, error) -> mc.execute(() -> {
+            if (!lyrics3d.getEnabled() || !trackKey.equals(lyricTrackKey)) return;
+            lyricTimeline = error == null ? LyricLineSplitter.splitLongLines(lines) : List.of();
+            resyncLyrics(predictedPositionMs, System.currentTimeMillis());
+        }));
+    }
+
+    private void advanceLyrics(long audioTimeMs, long now) {
+        while (lyricIndex < lyricTimeline.size()) {
+            LyricLine line = lyricTimeline.get(lyricIndex);
+            if (audioTimeMs < line.timestampMs()) break;
+
+            long durationMs = lyricDuration(lyricIndex);
+            long elapsed = audioTimeMs - line.timestampMs();
+            if (elapsed < durationMs) {
+                spawnLyric(line.text(), now - elapsed, durationMs);
+            }
+            lyricIndex++;
+        }
+    }
+
+    private void resyncLyrics(long audioTimeMs, long now) {
+        activeLyrics.clear();
+        lyricIndex = 0;
+        for (int i = 0; i < lyricTimeline.size(); i++) {
+            LyricLine line = lyricTimeline.get(i);
+            if (audioTimeMs < line.timestampMs()) break;
+
+            long durationMs = lyricDuration(i);
+            long elapsed = audioTimeMs - line.timestampMs();
+            if (elapsed < durationMs) {
+                spawnLyric(line.text(), now - elapsed, durationMs);
+            }
+            lyricIndex = i + 1;
+        }
+    }
+
+    private long lyricDuration(int index) {
+        LyricLine line = lyricTimeline.get(index);
+        long nextTimestamp = index + 1 < lyricTimeline.size()
+                ? lyricTimeline.get(index + 1).timestampMs()
+                : line.timestampMs() + 3_500L;
+        return MathHelper.clamp(nextTimestamp - line.timestampMs(), 1_400L, 5_500L);
+    }
+
+    private void spawnLyric(String text, long spawnTimeMs, long durationMs) {
+        if (mc.player == null || text == null || text.isBlank()) return;
+
+        while (activeLyrics.size() >= MAX_LYRIC_PARTICLES) activeLyrics.removeFirst();
+        Vec3d position = findLyricPosition(mc.player.getEyePos(), mc.gameRenderer.getCamera().getYaw());
+        activeLyrics.add(new LyricParticle3D(text, position, spawnTimeMs, durationMs));
+    }
+
+    private Vec3d findLyricPosition(Vec3d eyePosition, float cameraYaw) {
+        Vec3d best = eyePosition;
+        double bestSpacing = -1d;
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        for (int attempt = 0; attempt < 16; attempt++) {
+            double angle = Math.toRadians(cameraYaw + random.nextDouble(-70d, 70d));
+            double distance = random.nextDouble(2d, 4.5d);
+            Vec3d candidate = eyePosition.add(
+                    -Math.sin(angle) * distance,
+                    random.nextDouble(-0.25d, 0.55d),
+                    Math.cos(angle) * distance
+            );
+            if (activeLyrics.isEmpty()) return candidate;
+
+            double spacing = Double.MAX_VALUE;
+            for (LyricParticle3D active : activeLyrics) {
+                spacing = Math.min(spacing, candidate.distanceTo(active.getBasePosition()));
+            }
+            if (spacing >= 1.35d) return candidate;
+            if (spacing > bestSpacing) {
+                bestSpacing = spacing;
+                best = candidate;
+            }
+        }
+        return best;
+    }
+
+    private void clearLyrics() {
+        if (lyricTrackKey.isEmpty() && lyricTimeline.isEmpty() && activeLyrics.isEmpty()) return;
+        lyricTrackKey = "";
+        lyricTimeline = List.of();
+        lyricIndex = 0;
+        predictedPositionMs = 0L;
+        lastLyricsUpdateMs = 0L;
+        activeLyrics.clear();
     }
 
     private static boolean isEmpty(String s) {

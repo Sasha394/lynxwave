@@ -131,6 +131,7 @@ public final class ModuleManager extends CopyOnWriteArrayList<Module> implements
                 new Zoom(),
                 new AspectRatio(),
                 new CustomWorld(),
+                new Rain(),
                 new FullBright(),
                 new SeeInvisible(),
                 new NoRender(),
