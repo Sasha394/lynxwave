@@ -76,7 +76,7 @@ public class KillAura extends Module {
         setupCollections();
     }
 
-    public ModeElement aimMode = new ModeElement("Ротация", () -> true).set("Smooth", "Matrix", "Snap", "FunTime", "SpookyTime", "HolyWorld", "ReallyWorld", "Neuro", "TestAngle", "TecT").defaultValue("Smooth").register(this);
+    public ModeElement aimMode = new ModeElement("Ротация", () -> true).set("Smooth", "Matrix", "Snap", "FunTime", "SpookyTime", "HolyWorld", "ReallyWorld", "Neuro", "TestAngle", "TecT", "SuperSine").defaultValue("Smooth").register(this);
     public Slider distance = new Slider("Дистанция", () -> true).set(2.0f, 6.0f, 0.1f).defaultValue(3.0f).register(this);
     public Slider snapFov = new Slider("Радиус Snap", () -> aimMode.isSelected("Snap")).set(10f, 180f, 1f).defaultValue(90f).register(this);
 
@@ -130,6 +130,7 @@ public class KillAura extends Module {
     private int rotationReturnTicks;
     private final SpookyTimeAngleSmoothMode spookyTimeRotation = new SpookyTimeAngleSmoothMode();
     private final TecTRotation tecTRotation = new TecTRotation();
+    private final SuperSineAngleSmoothMode superSineRotation = new SuperSineAngleSmoothMode();
 
 
     private void findResolverPoint() {
@@ -393,7 +394,7 @@ public class KillAura extends Module {
                 }
             }
 
-            case "Smooth", "Matrix", "Neuro", "ReallyWorld", "TestAngle", "TecT" -> RotationController.INSTANCE.rotateTo(rotation, target, 1, turnConfig, TaskPriority.HIGH_IMPORTANCE_1, this);
+            case "Smooth", "Matrix", "Neuro", "ReallyWorld", "TestAngle", "TecT", "SuperSine" -> RotationController.INSTANCE.rotateTo(rotation, target, 1, turnConfig, TaskPriority.HIGH_IMPORTANCE_1, this);
             case "SpookyTime" -> RotationController.INSTANCE.rotateTo(rotation, target, 40, turnConfig, TaskPriority.HIGH_IMPORTANCE_1, this);
         }
     }
@@ -447,6 +448,7 @@ public class KillAura extends Module {
             case "SpookyTime" -> spookyTimeRotation;
             case "TestAngle" -> new TestAngleRotation();
             case "TecT" -> tecTRotation;
+            case "SuperSine" -> superSineRotation;
             default -> new LinearSmoothMode();
         };
     }
@@ -653,6 +655,7 @@ public class KillAura extends Module {
         rotationReturnTicks = 0;
         spookyTimeRotation.reset();
         tecTRotation.reset();
+        superSineRotation.reset();
         super.onEnabled();
     }
 
@@ -662,6 +665,7 @@ public class KillAura extends Module {
         RotationController.INSTANCE.smoothReturnToCamera(getSmoothMode());
         spookyTimeRotation.reset();
         tecTRotation.reset();
+        superSineRotation.reset();
         isResolving = false;
         resolverPoint = null;
         super.onDisabled();
