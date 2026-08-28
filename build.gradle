@@ -38,16 +38,15 @@ dependencies {
     mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
-    modCompileOnly "com.terraformersmc:modmenu:17.0.0"
     modImplementation(include("org.fusesource.jansi:jansi:2.4.0"))
     implementation "com.github.JnCrMx:discord-game-sdk4j:v1.0.0"
     embed("com.github.JnCrMx:discord-game-sdk4j:v1.0.0") {
         transitive = false
     }
-    compileOnly 'org.projectlombok:lombok:1.18.30'
-    annotationProcessor 'org.projectlombok:lombok:1.18.30'
-    testCompileOnly 'org.projectlombok:lombok:1.18.30'
-    testAnnotationProcessor 'org.projectlombok:lombok:1.18.30'
+    compileOnly 'org.projectlombok:lombok:1.18.46'
+    annotationProcessor 'org.projectlombok:lombok:1.18.46'
+    testCompileOnly 'org.projectlombok:lombok:1.18.46'
+    testAnnotationProcessor 'org.projectlombok:lombok:1.18.46'
     implementation files('libs/MediaPlayerInfo-0.1.0.jar')
     implementation include("ai.catboost:catboost-prediction:1.2.8")
     implementation "org.jetbrains.kotlin:kotlin-stdlib:2.1.20"

@@ -53,11 +53,21 @@ public abstract class LivingEntityRendererMixins implements ClientApi {
         if (entity == mc.player && controller != null && mc.player != null) {
             if (!(mc.currentScreen instanceof HandledScreen)) {
                 float playerYaw = mc.player.getYaw();
+                float playerPitch = mc.player.getPitch();
                 float targetYaw = controller.getRotation().getYaw();
                 float prevTargetYaw = controller.getPreviousRotation().getYaw();
+                float targetPitch = controller.getRotation().getPitch();
+                float prevTargetPitch = controller.getPreviousRotation().getPitch();
+
                 if (targetYaw != playerYaw || prevTargetYaw != playerYaw) {
                     float lerpedRotationYaw = MathHelper.lerpAngleDegrees(tickDelta, prevTargetYaw, targetYaw);
                     state.bodyYaw = lerpedRotationYaw;
+                    // Голова тоже должна смотреть по ротации, иначе она остаётся на камерном yaw.
+                    state.relativeHeadYaw = 0.0f;
+                }
+
+                if (targetPitch != playerPitch || prevTargetPitch != playerPitch) {
+                    state.pitch = MathHelper.lerp(tickDelta, prevTargetPitch, targetPitch);
                 }
             }
         }

@@ -130,7 +130,6 @@ public class KillAura extends Module {
     private int rotationReturnTicks;
     private final SpookyTimeAngleSmoothMode spookyTimeRotation = new SpookyTimeAngleSmoothMode();
     private final TecTRotation tecTRotation = new TecTRotation();
-    private final SuperSineAngleSmoothMode superSineRotation = new SuperSineAngleSmoothMode();
 
 
     private void findResolverPoint() {
@@ -448,7 +447,6 @@ public class KillAura extends Module {
             case "SpookyTime" -> spookyTimeRotation;
             case "TestAngle" -> new TestAngleRotation();
             case "TecT" -> tecTRotation;
-            case "SuperSine" -> superSineRotation;
             default -> new LinearSmoothMode();
         };
     }
@@ -631,7 +629,7 @@ public class KillAura extends Module {
 
     private Angle getTargetAngle() {
         float range = mc.player.isGliding() ? distance.getValue() + 2f : distance.getValue();
-        Vec3d targetPoint = BestPoint.getNearestPoint(target);
+        Vec3d targetPoint = BestPoint.getAimPoint(target, range);
 
         if (elytraAttackSettings.isSelected("Перегонять") && target.isGliding()) {
             targetPoint = PredictUtil.predict(target, predictDistance.getValue());
@@ -655,7 +653,6 @@ public class KillAura extends Module {
         rotationReturnTicks = 0;
         spookyTimeRotation.reset();
         tecTRotation.reset();
-        superSineRotation.reset();
         super.onEnabled();
     }
 
@@ -665,7 +662,6 @@ public class KillAura extends Module {
         RotationController.INSTANCE.smoothReturnToCamera(getSmoothMode());
         spookyTimeRotation.reset();
         tecTRotation.reset();
-        superSineRotation.reset();
         isResolving = false;
         resolverPoint = null;
         super.onDisabled();

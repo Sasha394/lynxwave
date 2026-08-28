@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "id": "lynxwave",
   "version": "${version}",
@@ -20,9 +20,6 @@
     ],
     "client": [
       "dev.client.api.framesync.client.FrameSyncClient"
-    ],
-    "modmenu": [
-      "dev.client.api.framesync.integration.ModMenuIntegration"
     ]
   },
 

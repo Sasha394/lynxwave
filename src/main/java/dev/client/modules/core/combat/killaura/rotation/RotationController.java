@@ -8,7 +8,6 @@ import dev.client.api.nullcry.events.core.game.RotationUpdateEvent;
 import dev.client.api.nullcry.events.core.game.TickEvent;
 import dev.client.api.nullcry.events.core.network.PacketEvent;
 import dev.client.api.nullcry.events.core.player.PlayerVelocityStrafeEvent;
-import dev.client.modules.core.combat.KillAura;
 import dev.client.api.nullcry.events.types.EventType;
 import dev.client.api.nullcry.modules.Module;
 import dev.client.modules.core.combat.killaura.rotation.angle.AngleSmoothMode;
@@ -58,9 +57,6 @@ public class RotationController implements ClientApi {
     }
 
     public Angle getMoveRotation() {
-        if (KillAura.INSTANCE == null || !KillAura.INSTANCE.isEnabled()) {
-            return AngleUtil.cameraAngle();
-        }
         RotationPlan rotationPlan = getCurrentRotationPlan();
         return currentAngle != null && rotationPlan != null && rotationPlan.isMoveCorrection() ? currentAngle : AngleUtil.cameraAngle();
     }
@@ -107,7 +103,7 @@ public class RotationController implements ClientApi {
         rotationPlanTaskProcessor.activeTasks.clear();
         rotationPlanTaskProcessor.tickCounter = 0;
         Angle cameraAngle = AngleUtil.cameraAngle();
-        lastRotationPlan = new RotationPlan(cameraAngle, cameraAngle.toVector(), null, smoothMode, 1, 2.0F, false, true);
+        lastRotationPlan = new RotationPlan(cameraAngle, cameraAngle.toVector(), null, smoothMode, 1, 2.0F, true, true);
     }
 
     public void update() {
@@ -177,9 +173,6 @@ public class RotationController implements ClientApi {
 
     @Subscribe
     public void onPlayerVelocityStrafe(PlayerVelocityStrafeEvent e) {
-        if (KillAura.INSTANCE == null || !KillAura.INSTANCE.isEnabled()) {
-            return;
-        }
         RotationPlan currentRotationPlan = getCurrentRotationPlan();
         if (currentRotationPlan != null && currentRotationPlan.isMoveCorrection()) {
             e.setVelocity(fixVelocity(e.getVelocity(), e.getMovementInput(), e.getSpeed()));

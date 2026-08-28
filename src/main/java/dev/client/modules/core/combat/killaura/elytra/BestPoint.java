@@ -5,6 +5,7 @@ import lombok.experimental.UtilityClass;
 import net.minecraft.entity.Entity;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.Box;
+import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.RaycastContext;
 
@@ -29,6 +30,29 @@ public class BestPoint implements ClientApi {
             }
         }
         return bestVec;
+    }
+
+    public Vec3d getAimPoint(Entity entity, double range) {
+        if (entity == null || mc.player == null) {
+            return entity == null ? null : getNearestPoint(entity);
+        }
+
+        Box box = entity.getBoundingBox();
+        Vec3d eyePos = mc.player.getEyePos();
+
+        // По X/Z берём ближайшую точку хитбокса — это даёт корректный yaw и минимальную дистанцию.
+        // По Y целимся в тело цели, а не в высоту собственных глаз, иначе pitch всегда выходит ~0.
+        double x = MathHelper.clamp(eyePos.x, box.minX, box.maxX);
+        double z = MathHelper.clamp(eyePos.z, box.minZ, box.maxZ);
+        double y = MathHelper.clamp(entity.getEyeY() - 0.15, box.minY, box.maxY);
+
+        Vec3d aimPoint = new Vec3d(x, y, z);
+        if (eyePos.distanceTo(aimPoint) <= range) {
+            return aimPoint;
+        }
+
+        // На границе досягаемости тело цели уже не достать — возвращаемся к ближайшей точке.
+        return getNearestPoint(entity);
     }
 
     public Vec3d getNearestVisiblePoint(Entity target, Vec3d preferredPoint, double range) {

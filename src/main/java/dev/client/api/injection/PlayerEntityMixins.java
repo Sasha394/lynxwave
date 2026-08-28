@@ -43,11 +43,7 @@ public abstract class PlayerEntityMixins extends LivingEntity {
         }
     }
 
-    @ModifyExpressionValue(
-            method = {"knockbackTarget", "doSweepingAttack"},
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/entity/player/PlayerEntity;getYaw()F"),
-            require = 0
-    )
+    @ModifyExpressionValue(method = {"knockbackTarget", "doSweepingAttack"}, at = @At(value = "INVOKE", target = "Lnet/minecraft/entity/player/PlayerEntity;getYaw()F"), require = 0)
     private float hookFixRotation(float original) {
         return RotationController.INSTANCE.getMoveRotation().getYaw();
     }

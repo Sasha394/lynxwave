@@ -180,6 +180,15 @@ public abstract class GameRendererMixins {
             }
         }
 
+        Rain rain = Rain.INSTANCE;
+        if (rain != null && rain.isEnabled()) {
+            rain.renderWetSurfaceFrame(
+                    client.gameRenderer.getCamera(),
+                    viewMatrix,
+                    RenderSystem.getProjectionMatrix()
+            );
+        }
+
         {
             MatrixStack ms = new MatrixStack();
             ms.multiplyPositionMatrix(viewMatrix);
@@ -189,14 +198,6 @@ public abstract class GameRendererMixins {
             Draw3DUtil.onDraw3D(new RenderEvent.Draw3D(ms, tickCounter));
         }
 
-        Rain rain = Rain.INSTANCE;
-        if (rain != null && rain.isEnabled()) {
-            rain.renderWetSurfaceFrame(
-                    client.gameRenderer.getCamera(),
-                    viewMatrix,
-                    RenderSystem.getProjectionMatrix()
-            );
-        }
 
         CustomWorld customWorld = CustomWorld.INSTANCE;
         if (customWorld != null && customWorld.isEnabled() && customWorld.mode.isSelected("Насыщенность")) {
