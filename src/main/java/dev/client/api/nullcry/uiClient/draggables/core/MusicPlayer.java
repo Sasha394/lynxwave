@@ -23,6 +23,7 @@ import dev.client.api.nullcry.uiClient.clickGui.api.setting.Setting;
 import dev.client.api.nullcry.uiClient.clickGui.api.setting.SettingProvider;
 import dev.client.api.nullcry.uiClient.draggables.HelperElements;
 import dev.client.api.nullcry.uiClient.draggables.IHelper;
+import dev.client.api.nullcry.uiClient.draggables.core.music.AlbumArtClient;
 import dev.client.api.nullcry.uiClient.draggables.core.music.LrcLibClient;
 import dev.client.api.nullcry.uiClient.draggables.core.music.LyricLine;
 import dev.client.api.nullcry.uiClient.draggables.core.music.LyricLineSplitter;
@@ -42,6 +43,10 @@ import net.minecraft.util.math.Vec3d;
 import org.lwjgl.BufferUtils;
 
 import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import javax.imageio.ImageIO;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -86,9 +91,12 @@ public class MusicPlayer implements IHelper, ClientApi, SettingProvider {
     }
 
     private MediaInfo media = new MediaInfo("Название Трека", "Артист", new byte[0], 0, 0, false);
-    private final Identifier artId = Identifier.of("lynxwave", "textures/music/art.png");
+    private final Identifier artId = Identifier.of("lynxwave", "dynamic/music_art");
     private final TimerUtil lastMedia = new TimerUtil();
     public IMediaSession session;
+    private volatile boolean artworkReady;
+    private volatile boolean artworkLoading;
+    private volatile String artworkTrackKey = "";
 
     private static final float PANEL_W = 145f;
     private static final float PANEL_H = 45f;
@@ -150,9 +158,7 @@ public class MusicPlayer implements IHelper, ClientApi, SettingProvider {
                 if (currentSession != null) {
                     MediaInfo info = currentSession.getMedia();
                     if (!info.getTitle().isEmpty() || !info.getArtist().isEmpty()) {
-                        if (media.getTitle().equals("Название Трека") || !Arrays.equals(media.getArtworkPng(), info.getArtworkPng())) {
-                            registerTexture(artId, info.getArtworkPng());
-                        }
+                        updateArtwork(info);
                         media = info;
                         lastMedia.reset();
                     }
@@ -204,14 +210,17 @@ public class MusicPlayer implements IHelper, ClientApi, SettingProvider {
         HelperElements.rectElements(ev.getContext(), x, y, PANEL_W, PANEL_H, a);
         ScissorUtil.enable(x, y, PANEL_W, PANEL_H);
 
-        boolean hasArt = media.getArtworkPng() != null && media.getArtworkPng().length > 0;
+        boolean hasArt = artworkReady;
         boolean hasMeta = !(isEmpty(media.getTitle()) && isEmpty(media.getArtist())) || media.getDuration() > 0;
         boolean hasTrack = session != null && (hasMeta || hasArt);
 
         float artX = x + PAD;
         float artY = y + (PANEL_H - ART_SIZE) * 0.5f;
 
-        if (hasTrack) {
+        // The media-session API does not provide album art for every player/track.
+        // Never render artId in that case: Minecraft displays an invalid texture as
+        // the black-and-magenta checkerboard seen in the HUD.
+        if (hasArt) {
             DrawUtil.renderTexture(
                     ev.getContext(),
                     artX, artY,
@@ -222,12 +231,7 @@ public class MusicPlayer implements IHelper, ClientApi, SettingProvider {
                     new Color(HelperElements.themedWhite((int) (255 * a)), true)
             );
         } else {
-            Builder.RECTANGLE_BUILDER
-                    .radius(new QuadRadiusState(ART_RADIUS))
-                    .color(new QuadColorState(ColorUtils.rgba(0, 0, 0, (int) (200 * a))))
-                    .size(new SizeState(ART_SIZE, ART_SIZE))
-                    .build()
-                    .render(dev.client.api.compat.GuiMatrixCompat.toMatrix4(ev.getContext()), artX, artY);
+            renderArtworkPlaceholder(ev, artX, artY, a);
         }
 
         float textL = artX + ART_SIZE + PAD;
@@ -394,6 +398,31 @@ public class MusicPlayer implements IHelper, ClientApi, SettingProvider {
                 .render(dev.client.api.compat.GuiMatrixCompat.toMatrix4(ev.getContext()), prevX + ICON_S, prevY);
 
         ScissorUtil.disable();
+    }
+
+    private void renderArtworkPlaceholder(RenderEvent.Draw2D event, float x, float y, float alpha) {
+        var matrix = dev.client.api.compat.GuiMatrixCompat.toMatrix4(event.getContext());
+        Builder.RECTANGLE_BUILDER
+                .radius(new QuadRadiusState(ART_RADIUS))
+                .color(new QuadColorState(ColorUtils.rgba(0, 0, 0, (int) (200 * alpha))))
+                .size(new SizeState(ART_SIZE, ART_SIZE))
+                .build()
+                .render(matrix, x, y);
+
+        int noteColor = HelperElements.themedWhite((int) (190 * alpha));
+        // A small music-note fallback while album art is unavailable.
+        renderPlaceholderShape(matrix, x + 16f, y + 8f, 2f, 14f, 1f, noteColor);
+        renderPlaceholderShape(matrix, x + 11f, y + 8f, 7f, 2f, 1f, noteColor);
+        renderPlaceholderShape(matrix, x + 9f, y + 20f, 8f, 6f, 3f, noteColor);
+    }
+
+    private void renderPlaceholderShape(org.joml.Matrix4f matrix, float x, float y, float width, float height, float radius, int color) {
+        Builder.RECTANGLE_BUILDER
+                .radius(new QuadRadiusState(radius))
+                .color(new QuadColorState(color))
+                .size(new SizeState(width, height))
+                .build()
+                .render(matrix, x, y);
     }
 
     private void togglePlayPause() {
@@ -576,14 +605,76 @@ public class MusicPlayer implements IHelper, ClientApi, SettingProvider {
         return m + ":" + (s < 10 ? "0" : "") + s;
     }
 
-    public void registerTexture(Identifier id, byte[] content) {
+    private void updateArtwork(MediaInfo info) {
+        String trackKey = artworkKey(info.getTitle(), info.getArtist());
+        boolean trackChanged = !trackKey.equals(artworkTrackKey);
+        boolean sourceArtworkChanged = !Arrays.equals(media.getArtworkPng(), info.getArtworkPng());
+        byte[] embeddedArtwork = info.getArtworkPng();
+
+        if (trackChanged) {
+            artworkTrackKey = trackKey;
+            artworkReady = false;
+            artworkLoading = false;
+        }
+
+        if (embeddedArtwork != null && embeddedArtwork.length > 0 && (trackChanged || sourceArtworkChanged || (!artworkReady && !artworkLoading))) {
+            artworkLoading = true;
+            registerTexture(artId, embeddedArtwork, trackKey);
+            return;
+        }
+
+        if (trackChanged) {
+            artworkLoading = true;
+            AlbumArtClient.fetchArtworkAsync(info.getTitle(), info.getArtist())
+                    .thenAccept(artwork -> {
+                        if (artwork.length > 0 && trackKey.equals(artworkTrackKey) && !artworkReady) {
+                            registerTexture(artId, artwork, trackKey);
+                        } else if (trackKey.equals(artworkTrackKey)) {
+                            artworkLoading = false;
+                        }
+                    });
+        }
+    }
+
+    private static String artworkKey(String title, String artist) {
+        return ((title == null ? "" : title.trim()) + "\u0000" + (artist == null ? "" : artist.trim())).toLowerCase(Locale.ROOT);
+    }
+
+    private void registerTexture(Identifier id, byte[] content, String trackKey) {
         if (content == null || content.length == 0) return;
+        try {
+            NativeImageBackedTexture texture = decodeArtwork(content, id);
+            mc.execute(() -> {
+                if (!trackKey.equals(artworkTrackKey)) {
+                    texture.close();
+                    return;
+                }
+                mc.getTextureManager().registerTexture(id, texture);
+                artworkReady = true;
+                artworkLoading = false;
+            });
+        } catch (Exception ignored) {
+            if (trackKey.equals(artworkTrackKey)) artworkLoading = false;
+        }
+    }
+
+    private static NativeImageBackedTexture decodeArtwork(byte[] content, Identifier id) throws IOException {
         try {
             ByteBuffer data = BufferUtils.createByteBuffer(content.length).put(content);
             data.flip();
-            NativeImageBackedTexture tex = new NativeImageBackedTexture(() -> "lynxwave-music-art/" + id, NativeImage.read(data));
-            mc.execute(() -> mc.getTextureManager().registerTexture(id, tex));
+            return new NativeImageBackedTexture(() -> "lynxwave-music-art/" + id, NativeImage.read(data));
         } catch (Exception ignored) {
         }
+
+        BufferedImage bufferedImage = ImageIO.read(new ByteArrayInputStream(content));
+        if (bufferedImage == null) throw new IOException("Unsupported album art format");
+
+        NativeImage image = new NativeImage(bufferedImage.getWidth(), bufferedImage.getHeight(), true);
+        for (int y = 0; y < bufferedImage.getHeight(); y++) {
+            for (int x = 0; x < bufferedImage.getWidth(); x++) {
+                image.setColorArgb(x, y, bufferedImage.getRGB(x, y));
+            }
+        }
+        return new NativeImageBackedTexture(() -> "lynxwave-music-art/" + id, image);
     }
 }
