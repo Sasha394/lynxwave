@@ -79,7 +79,7 @@ public class TargetHud implements IHelper, SettingProvider, PanelAlphaProvider {
     }
 
     public final ModeElement mode = new ModeElement("Режим", () -> true)
-            .set("Nursultan", "Rockstar", "exp")
+            .set("Nursultan", "Rockstar")
             .defaultValue("Nursultan")
             .register(this);
 
