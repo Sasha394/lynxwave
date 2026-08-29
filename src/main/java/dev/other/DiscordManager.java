@@ -10,7 +10,7 @@ import dev.client.api.nullcry.helper.client.ConnectionHelper;
 
 public final class DiscordManager {
     private static final long APP_ID = 1511138735805435934L;
-    private static final String LARGE_IMAGE_KEY = "https://i.postimg.cc/7P90rS12/ezgif-52c50fea6229c3.gif";
+    private static final String LARGE_IMAGE_KEY = "кeliability";
 
     private static final String SMALL_NEXUS = "https://i.postimg.cc/RZjggMQs/photo-2026-01-25-14-46-22.jpg";
     private static final String SMALL_FUNTIME = "https://i.imgur.com/eKb1Vbk.png";
