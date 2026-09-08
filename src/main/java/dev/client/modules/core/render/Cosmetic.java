@@ -21,6 +21,7 @@ import dev.client.api.nullcry.render.ColorUtils;
 import dev.client.api.nullcry.render.core.animations.nova.extended.Animation;
 import dev.client.api.nullcry.render.core.animations.nova.extended.Direction;
 import dev.client.api.nullcry.render.core.animations.nova.extended.core.EaseBackIn;
+import dev.client.modules.core.render.dashtrail.DashTrailRenderer;
 import dev.client.modules.core.render.littlepet.GhostWolfEntity;
 import net.minecraft.block.BlockState;
 import net.minecraft.client.render.BufferBuilder;
@@ -59,6 +60,7 @@ public class Cosmetic extends Module {
     private static final String C_PET = "Питомец";
     private static final String C_PENIS = "Пенис";
     private static final String C_MODELS = "Модельки";
+    private static final String C_DASH = "След от рывка";
 
     public static final String MODEL_RABBIT = "Crazy Rabbit";
     public static final String MODEL_FREDDY = "Freddy Bear";
@@ -66,7 +68,7 @@ public class Cosmetic extends Module {
     public static final String MODEL_INK_DEMON = "Ink Demon";
 
     public final SelectElements cosmetics = new SelectElements("Косметика", () -> true)
-            .set(C_WINGS, C_HAT, C_PET, C_PENIS, C_MODELS)
+            .set(C_WINGS, C_HAT, C_PET, C_PENIS, C_MODELS, C_DASH)
             .register(this);
 
     private static final String WINGS_TYPE_1 = "Тип 1";
@@ -200,6 +202,12 @@ public class Cosmetic extends Module {
         } else if (fakeEntity != null) {
             removePet();
         }
+
+        if (cosmetics.isSelected(C_DASH)) {
+            DashTrailRenderer.INSTANCE.tick();
+        } else {
+            DashTrailRenderer.INSTANCE.clear();
+        }
     }
 
     @Subscribe
@@ -230,6 +238,10 @@ public class Cosmetic extends Module {
 
         if (isWingsType4()) {
             renderWingsType4(event);
+        }
+
+        if (cosmetics.isSelected(C_DASH)) {
+            DashTrailRenderer.INSTANCE.render(event.getMatrices(), (float) MathUtil.getTickDelta());
         }
     }
 

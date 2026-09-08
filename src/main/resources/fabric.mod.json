@@ -15,17 +15,12 @@
   "environment": "client",
   "entrypoints": {
     "main": [
-      "dev.client.LynxWave",
-      "dev.client.api.framesync.FrameSync"
-    ],
-    "client": [
-      "dev.client.api.framesync.client.FrameSyncClient"
+      "dev.client.LynxWave"
     ]
   },
 
   "mixins": [
-    "lynxwave_mixins.json",
-    "framesync.mixins.json"
+    "lynxwave_mixins.json"
   ],
 
   "accessWidener": "lynxwave.accesswidener",

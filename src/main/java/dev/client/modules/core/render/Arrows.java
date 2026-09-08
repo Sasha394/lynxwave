@@ -56,6 +56,13 @@ public class Arrows extends Module {
     CheckBox jumpArrows = new CheckBox("Анимация прыганья", () -> true).defaultValue(false).register(this);
 
     private final List<Target> renderableTargets = new ArrayList<>();
+
+    private static final long FADE_IN_MS = 220L;
+    private static final long FADE_OUT_MS = 260L;
+
+    private final java.util.Map<String, FadingTarget> fadingTargets = new java.util.LinkedHashMap<>();
+    private long lastFrameTime;
+
     float animatedYaw;
     float animatedPitch;
     float animationStep;
@@ -72,8 +79,10 @@ public class Arrows extends Module {
         }
 
         collectTargets();
+        updateFadingTargets();
 
-        if (renderableTargets.isEmpty()) {
+
+        if (fadingTargets.isEmpty()) {
             return;
         }
 
@@ -108,8 +117,8 @@ public class Arrows extends Module {
 
         if (mc.options.getPerspective() == Perspective.FIRST_PERSON || showInThirdPerson.getEnabled()) {
             boolean renderedAny = false;
-            for (Target target : renderableTargets) {
-                renderArrowAndText(draw2D, target);
+            for (FadingTarget fading : fadingTargets.values()) {
+                renderArrowAndText(draw2D, fading.target, easeOutQuart(fading.progress));
                 renderedAny = true;
             }
             if (renderedAny) {
@@ -190,8 +199,46 @@ public class Arrows extends Module {
         }
     }
 
-    private void renderArrowAndText(RenderEvent.Draw2D draw2D, Target target) {
-        if (mc.getEntityRenderDispatcher().camera == null) {
+    /**
+     * Сливает свежий список целей с уже видимыми: новые начинают проявляться,
+     * пропавшие остаются в списке и гаснут, пока не дойдут до нуля.
+     */
+    private void updateFadingTargets() {
+        long now = System.currentTimeMillis();
+        float delta = lastFrameTime == 0L ? 0f : Math.min(200L, now - lastFrameTime);
+        lastFrameTime = now;
+
+        Set<String> present = new HashSet<>();
+        for (Target target : renderableTargets) {
+            String key = target.key();
+            present.add(key);
+
+            FadingTarget fading = fadingTargets.computeIfAbsent(key, ignored -> new FadingTarget());
+            fading.target = target;
+            fading.progress = Math.min(1f, fading.progress + delta / FADE_IN_MS);
+        }
+
+        fadingTargets.entrySet().removeIf(entry -> {
+            if (present.contains(entry.getKey())) return false;
+
+            FadingTarget fading = entry.getValue();
+            fading.progress -= delta / FADE_OUT_MS;
+            return fading.progress <= 0f || fading.target == null;
+        });
+    }
+
+    private static float easeOutQuart(float x) {
+        float inverted = 1f - MathHelper.clamp(x, 0f, 1f);
+        return 1f - inverted * inverted * inverted * inverted;
+    }
+
+    private static final class FadingTarget {
+        private Target target;
+        private float progress;
+    }
+
+    private void renderArrowAndText(RenderEvent.Draw2D draw2D, Target target, float alpha) {
+        if (mc.getEntityRenderDispatcher().camera == null || alpha <= 0.01f) {
             return;
         }
 
@@ -227,10 +274,14 @@ public class Arrows extends Module {
                     : target.isFriend()
                     ? Color.GREEN.getRGB()
                     : baseArrowColor;
-            renderArrowTexture(draw2D, 42f, ColorUtils.setAlpha(arrowColor, 24));
-            renderArrowTexture(draw2D, 34f, ColorUtils.setAlpha(arrowColor, 45));
-            renderArrowTexture(draw2D, 28f, ColorUtils.setAlpha(arrowColor, 70));
-            renderArrowTexture(draw2D, 24f, arrowColor);
+            // Стрелка ещё и подрастает, а не просто проявляется.
+            float scale = 0.55f + 0.45f * alpha;
+
+            renderBloom(draw2D, 24f * scale * 2.4f, ColorUtils.setAlpha(arrowColor, (int) (70 * alpha)));
+            renderArrowTexture(draw2D, 42f * scale, ColorUtils.setAlpha(arrowColor, (int) (24 * alpha)));
+            renderArrowTexture(draw2D, 34f * scale, ColorUtils.setAlpha(arrowColor, (int) (45 * alpha)));
+            renderArrowTexture(draw2D, 28f * scale, ColorUtils.setAlpha(arrowColor, (int) (70 * alpha)));
+            renderArrowTexture(draw2D, 24f * scale, ColorUtils.setAlpha(arrowColor, (int) (255 * alpha)));
             if (type.isSelected("Никнейм") || type.isSelected("Метры")) {
                 int nameColor = target.isPartyMember()
                         ? new Color(71, 163, 255).getRGB()
@@ -242,6 +293,18 @@ public class Arrows extends Module {
 
         lastYaw = mc.player.getYaw();
         lastPitch = mc.player.getPitch();
+    }
+
+    /** Засветка под стрелкой тем же спрайтом bloom.png, что и у 3D-частиц клиента. */
+    private void renderBloom(RenderEvent.Draw2D draw2D, float size, int color) {
+        if ((color >>> 24) <= 0) return;
+
+        Builder.TEXTURE_BUILDER
+                .size(new SizeState(size, size))
+                .texture(0, 0, 1, 1, ClientTexture.of("particle/bloom.png"))
+                .color(new QuadColorState(color))
+                .build()
+                .render(dev.client.api.compat.GuiMatrixCompat.toMatrix4(draw2D.getContext()), -size / 2f, -size / 2f);
     }
 
     private void renderArrowTexture(RenderEvent.Draw2D draw2D, float size, int color) {
@@ -447,6 +510,14 @@ public class Arrows extends Module {
             double dy = remoteY - player.getY();
             double dz = remoteZ - player.getZ();
             return Math.sqrt(dx * dx + dy * dy + dz * dz);
+        }
+
+        /** Устойчивый ключ цели: по нему стрелка узнаётся между кадрами. */
+        public String key() {
+            if (entity != null) return "e:" + entity.getUuidAsString();
+            if (ircName != null && !ircName.isBlank()) return "i:" + ircName;
+            if (gameName != null && !gameName.isBlank()) return "g:" + gameName;
+            return "p:" + remoteX + ":" + remoteY + ":" + remoteZ;
         }
 
         public Vec3d toRelativePosition(double tickDelta, Vec3d cameraPos) {

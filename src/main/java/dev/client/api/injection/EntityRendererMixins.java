@@ -1,9 +1,12 @@
 package dev.client.api.injection;
 
 import dev.client.LynxWave;
+import dev.client.api.nullcry.helper.entity.EntityRenderStateOwner;
 import dev.client.api.nullcry.events.EventManager;
 import dev.client.api.nullcry.events.core.render.RenderEvent;
 import dev.client.modules.core.misc.NameProtect;
+import dev.client.modules.core.render.Beautifully;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.render.command.OrderedRenderCommandQueue;
 import net.minecraft.client.render.entity.EntityRenderer;
@@ -35,6 +38,15 @@ public abstract class EntityRendererMixins<T extends Entity, S extends EntityRen
         Text displayName = state.displayName;
         if (displayName != null && NameProtect.INSTANCE != null && NameProtect.INSTANCE.isEnabled()) {
             state.displayName = NameProtect.INSTANCE.patchText(displayName);
+        }
+    }
+
+    @Inject(method = "updateRenderState", at = @At("TAIL"))
+    private void lynx$captureEntity(T entity, S state, float tickDelta, CallbackInfo ci) {
+        ((EntityRenderStateOwner) state).lynx$setEntity(entity);
+        // Огонь поверх модели не умеет плавно исчезать вместе с ней.
+        if (Beautifully.playerFading() && entity == MinecraftClient.getInstance().player) {
+            state.onFire = false;
         }
     }
 }

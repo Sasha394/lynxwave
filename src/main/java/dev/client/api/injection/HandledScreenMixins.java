@@ -4,6 +4,8 @@ import dev.client.LynxWave;
 import dev.client.api.injection.accessor.IScreenInvoker;
 import dev.client.api.nullcry.helper.other.TimerUtil;
 import dev.client.modules.core.misc.AHHelper;
+import dev.client.modules.core.render.Beautifully;
+import dev.client.modules.core.render.beautifully.Easing;
 import dev.client.modules.core.player.ItemScroller;
 import dev.client.modules.core.combat.AutoSwap;
 import net.minecraft.client.MinecraftClient;
@@ -226,5 +228,56 @@ public abstract class HandledScreenMixins<T extends ScreenHandler> {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    // ---- Beautifully «Анимация инвентаря» ----
+
+    @Shadow public int x;
+    @Shadow public int y;
+    @Shadow public int backgroundWidth;
+    @Shadow public int backgroundHeight;
+
+    @Unique private long lynx$openTime;
+    @Unique private float lynx$openProgress;
+    @Unique private boolean lynx$scaled;
+
+    @Inject(method = "init", at = @At("HEAD"))
+    private void lynx$startOpenAnimation(CallbackInfo ci) {
+        this.lynx$openTime = System.currentTimeMillis();
+    }
+
+    @Inject(method = "renderBackground", at = @At("HEAD"))
+    private void lynx$beginOpenAnimation(DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+        this.lynx$scaled = false;
+        if (!Beautifully.inventoryAnimation()) return;
+
+        float progress = (System.currentTimeMillis() - this.lynx$openTime) / 200.0f;
+        if (progress >= 1.0f || progress < 0.0f) return;
+
+        this.lynx$openProgress = Easing.BACK_OUT.ease(progress, 0.0f, 1.0f, 1.0f);
+        this.lynx$scaled = true;
+    }
+
+    @Inject(method = "renderBackground", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/screen/ingame/HandledScreen;drawBackground(Lnet/minecraft/client/gui/DrawContext;FII)V", shift = At.Shift.BEFORE))
+    private void lynx$pushOpenAnimation(DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+        if (!this.lynx$scaled) return;
+
+        float centerX = this.x + this.backgroundWidth / 2.0f;
+        float centerY = this.y + this.backgroundHeight / 2.0f;
+        float scale = 0.88f + 0.12f * this.lynx$openProgress;
+
+        context.getMatrices().pushMatrix();
+        context.getMatrices().translate(centerX, centerY + (1.0f - this.lynx$openProgress) * 10.0f);
+        context.getMatrices().scale(scale, scale);
+        context.getMatrices().translate(-centerX, -centerY);
+    }
+
+    /** Матрица держится до конца кадра, чтобы вместе с фоном ехали слоты и предметы. */
+    @Inject(method = "render", at = @At("TAIL"))
+    private void lynx$popOpenAnimation(DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+        if (!this.lynx$scaled) return;
+
+        this.lynx$scaled = false;
+        context.getMatrices().popMatrix();
     }
 }

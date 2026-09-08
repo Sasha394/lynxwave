@@ -1,8 +1,10 @@
 package dev.client.api.nullcry.uiClient.clickGui.components.panel;
 import dev.client.api.nullcry.uiClient.draggables.HelperElements;
 
+import dev.client.LynxWave;
 import dev.client.api.nullcry.ClientApi;
 import dev.client.api.nullcry.MouseClick;
+import dev.client.api.nullcry.modules.Module;
 import dev.client.api.nullcry.modules.ModuleCategory;
 import dev.client.api.nullcry.render.ColorUtils;
 import dev.client.api.nullcry.render.CursorsUtil;
@@ -18,6 +20,8 @@ import dev.client.api.nullcry.uiClient.clickGui.BackgroundComponent;
 import dev.client.api.nullcry.uiClient.clickGui.api.Helper;
 import dev.client.api.nullcry.uiClient.clickGui.api.component.Component;
 import dev.client.api.nullcry.uiClient.clickGui.api.setting.SettingComponent;
+import dev.client.api.nullcry.uiClient.clickGui.components.search.ModuleSearch;
+import dev.client.api.nullcry.uiClient.clickGui.components.search.SearchRanker;
 import dev.client.api.nullcry.uiClient.clickGui.components.settings.ModuleComponent;
 import dev.client.modules.core.render.Interface;
 import lombok.AccessLevel;
@@ -27,6 +31,7 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.util.math.MathHelper;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -414,10 +419,7 @@ public class PanelComponent extends Component {
         this.animationScroll = 0;
         SCROLL_CACHE.put(category, 0f);
 
-        List<ModuleComponent> filteredModules = Helper.moduleLayers(category, module -> {
-            String name = module.getName();
-            return name != null && name.toLowerCase().contains(currentFilter);
-        });
+        List<ModuleComponent> filteredModules = collectModules(this.currentFilter);
 
         componentsList.clear();
         this.componentsList.addAll(filteredModules);
@@ -425,6 +427,36 @@ public class PanelComponent extends Component {
         filteredModules.forEach(moduleComponent -> {
             moduleComponent.getComponents().forEach(SettingComponent::init);
         });
+    }
+
+    /** Есть ли что показывать после текущего фильтра. */
+    public boolean hasModules() {
+        return !this.componentsList.isEmpty();
+    }
+
+    /**
+     * Пустой запрос — обычный порядок модулей категории.
+     * Иначе модули ранжируются по названию и названиям настроек: точнее совпало — выше.
+     */
+    private List<ModuleComponent> collectModules(String filter) {
+        String query = SearchRanker.normalize(filter);
+        if (query.isEmpty()) {
+            return Helper.moduleLayers(category, module -> true);
+        }
+
+        String swappedQuery = SearchRanker.normalize(SearchRanker.swapLayout(filter));
+
+        record Ranked(Module module, int score) {
+        }
+
+        return LynxWave.getInstance().getModuleManager().getModules().stream()
+                .filter(module -> module.getModuleCategory() == category)
+                .map(module -> new Ranked(module, ModuleSearch.rank(module, query, swappedQuery)))
+                .filter(ranked -> ranked.score() != SearchRanker.NO_MATCH)
+                .sorted(Comparator.comparingInt(Ranked::score)
+                        .thenComparing(ranked -> ranked.module().getName(), String.CASE_INSENSITIVE_ORDER))
+                .map(ranked -> new ModuleComponent(ranked.module()))
+                .toList();
     }
 
     @Override

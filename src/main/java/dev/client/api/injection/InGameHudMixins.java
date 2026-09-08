@@ -23,16 +23,22 @@ import dev.client.modules.core.misc.NameProtect;
 import dev.client.modules.core.render.Crosshair;
 import dev.client.modules.core.render.Interface;
 import dev.client.modules.core.render.NoRender;
+import dev.client.modules.core.render.Beautifully;
+import dev.client.modules.core.render.beautifully.AnimatedValue;
+import dev.client.modules.core.render.beautifully.Easing;
 import dev.other.scoreboard.SidebarEntry;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.hud.ChatHud;
 import net.minecraft.client.gui.hud.InGameHud;
+import net.minecraft.client.gui.hud.PlayerListHud;
 import net.minecraft.client.option.AttackIndicator;
 import net.minecraft.client.render.RenderTickCounter;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.scoreboard.Scoreboard;
+import net.minecraft.scoreboard.ScoreboardDisplaySlot;
 import net.minecraft.scoreboard.ScoreboardEntry;
 import net.minecraft.scoreboard.ScoreboardObjective;
 import net.minecraft.scoreboard.Team;
@@ -49,6 +55,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.Comparator;
@@ -485,5 +492,56 @@ public abstract class InGameHudMixins {
         }
 
         ci.cancel();
+    }
+
+    // ---- Beautifully ----
+
+    @Shadow @Final private PlayerListHud playerListHud;
+
+    /**
+     * «Анимация таба»: список игроков появляется с лёгким наездом и уезжает обратно.
+     * Ванильная отрисовка отменяется и повторяется внутри анимированной матрицы.
+     */
+    @Inject(method = "renderPlayerList", at = @At("HEAD"), cancellable = true)
+    private void lynx$animatePlayerList(DrawContext context, RenderTickCounter tickCounter, CallbackInfo ci) {
+        if (!Beautifully.tabAnimation()) return;
+        if (this.client.world == null || this.client.player == null || this.client.player.networkHandler == null) return;
+
+        Scoreboard scoreboard = this.client.world.getScoreboard();
+        ScoreboardObjective objective = scoreboard.getObjectiveForSlot(ScoreboardDisplaySlot.LIST);
+        boolean visible = this.client.options.playerListKey.isPressed()
+                && (!this.client.isInSingleplayer()
+                || this.client.player.networkHandler.getListedPlayerListEntries().size() > 1
+                || objective != null);
+
+        ci.cancel();
+
+        AnimatedValue animation = Beautifully.ready().getTabListAnimation();
+        animation.setDuration(200L);
+        animation.setEasing(visible ? Easing.BACK_OUT : Easing.CUBIC_IN);
+        float progress = animation.update(visible ? 1.0f : 0.0f);
+
+        this.playerListHud.setVisible(visible);
+        if (progress <= 0.005f) return;
+
+        // Ваниль поднимает таб в новый слой — иначе он уедет под остальной HUD.
+        context.createNewRootLayer();
+
+        float width = context.getScaledWindowWidth();
+        float scale = 0.96f + 0.04f * progress;
+
+        context.getMatrices().pushMatrix();
+        context.getMatrices().translate(width / 2.0f, 0.0f);
+        context.getMatrices().scale(scale, scale);
+        context.getMatrices().translate(-width / 2.0f, (progress - 1.0f) * 10.0f);
+        this.playerListHud.render(context, context.getScaledWindowWidth(), scoreboard, objective);
+        context.getMatrices().popMatrix();
+    }
+
+    /** «История чата»: не вычищать чат при смене мира или переподключении. */
+    @Redirect(method = "clear", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/hud/ChatHud;clear(Z)V"))
+    private void lynx$keepChatHistory(ChatHud chatHud, boolean clearHistory) {
+        if (Beautifully.keepChatHistory()) return;
+        chatHud.clear(clearHistory);
     }
 }

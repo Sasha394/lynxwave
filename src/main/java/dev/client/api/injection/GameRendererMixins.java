@@ -13,6 +13,7 @@ import dev.client.api.nullcry.render.core.RenderCoreCompat;
 import dev.client.modules.core.combat.NoEntityTrace;
 import dev.client.api.nullcry.render.core.renderers.core.handflame.HandShaderRenderer;
 import dev.client.modules.core.render.CustomWorld;
+import dev.client.modules.core.render.FrameSync;
 import dev.client.modules.core.render.NoRender;
 import dev.client.modules.core.render.PostEffectRenderer;
 import dev.client.modules.core.render.Rain;
@@ -114,6 +115,13 @@ public abstract class GameRendererMixins {
         com.mojang.blaze3d.systems.RenderSystem.getDevice()
                 .createCommandEncoder()
                 .copyTextureToTexture(srcColor, dstColor, 0, 0, 0, 0, 0, width, height);
+    }
+
+    @Inject(method = "render", at = @At("HEAD"), cancellable = true)
+    private void lynx$frameSyncLimit(RenderTickCounter tickCounter, boolean tick, CallbackInfo ci) {
+        if (!FrameSync.shouldRenderFrame()) {
+            ci.cancel();
+        }
     }
 
     @Inject(

@@ -4,6 +4,7 @@ import com.google.common.eventbus.Subscribe;
 import dev.client.LynxWave;
 import dev.client.api.nullcry.ClientApi;
 import dev.client.api.nullcry.events.core.input.KeyBindEvent;
+import dev.client.api.nullcry.helper.entity.MovingUtil;
 import dev.client.api.nullcry.render.CursorsUtil;
 import dev.client.api.nullcry.render.ScissorUtil;
 import dev.client.api.nullcry.render.core.GLUtils;
@@ -27,12 +28,15 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.FieldDefaults;
 import lombok.experimental.NonFinal;
+import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.client.input.CharInput;
 import net.minecraft.client.input.KeyInput;
+import net.minecraft.client.option.KeyBinding;
+import net.minecraft.client.util.InputUtil;
 import net.minecraft.client.input.MouseInput;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.MathHelper;
@@ -106,9 +110,9 @@ public class ClickGuiScreen extends Screen implements ClientApi {
             panelsLayer.position(panelsX, by).size(panelsWidth, panelsHeight);
 
             // Search bar - below center panels
-            float searchW = 125f;
+            float searchW = 207f;
             float searchX = panelsX + (panelsWidth - searchW) / 2f;
-            searchBar.position(searchX, by + panelsHeight + 8f).size(searchW, 23f);
+            searchBar.position(searchX, by + panelsHeight + 8f).size(searchW, 24f);
 
             // Config Manager - bottom right
             float configX = panelsX + panelsWidth + sideGap;
@@ -274,8 +278,26 @@ public class ClickGuiScreen extends Screen implements ClientApi {
     @Override
     public void tick() {
         super.tick();
-        if (closing && revealAnimation.isFinished(Direction.BACKWARDS)) {
-            finishClose();
+        if (closing) {
+            keepMovementWhileClosing();
+
+            if (revealAnimation.isFinished(Direction.BACKWARDS)) {
+                finishClose();
+            }
+        }
+    }
+
+    /**
+     * Пока доигрывается анимация закрытия, экран ещё открыт, а Minecraft держит клавиши
+     * движения отжатыми — игрок стоял на месте всю анимацию. Возвращаем биндам реальное
+     * состояние клавиш каждый тик, как это делает GuiWalk.
+     */
+    private void keepMovementWhileClosing() {
+        if (mc.player == null) return;
+
+        for (KeyBinding keyBinding : MovingUtil.getMovementKeys(false)) {
+            InputUtil.Key bound = KeyBindingHelper.getBoundKeyOf(keyBinding);
+            keyBinding.setPressed(bound != null && InputUtil.isKeyPressed(mc.getWindow(), bound.getCode()));
         }
     }
 
@@ -304,7 +326,12 @@ public class ClickGuiScreen extends Screen implements ClientApi {
         double[] logicalMouse = toLogicalMouse(mouseX, mouseY, totalScale, centerX, centerY);
         double renderMouseX = logicalMouse[0];
         double renderMouseY = logicalMouse[1];
-        componentsList.forEach(e -> e.mouseClicked(renderMouseX, renderMouseY, button));
+        // Сверху вниз: кто первым принял клик, тот его и забирает.
+        for (int i = componentsList.size() - 1; i >= 0; i--) {
+            if (componentsList.get(i).mouseClicked(renderMouseX, renderMouseY, button)) {
+                return true;
+            }
+        }
         return super.mouseClicked(new Click(renderMouseX, renderMouseY, new MouseInput(button, click.modifiers())), doubled);
     }
 
@@ -382,7 +409,12 @@ public class ClickGuiScreen extends Screen implements ClientApi {
         double[] logicalMouse = toLogicalMouse(mouseX, mouseY, totalScale, centerX, centerY);
         double renderMouseX = logicalMouse[0];
         double renderMouseY = logicalMouse[1];
-        componentsList.forEach(e -> e.mouseScrolled(renderMouseX, renderMouseY, horizontalAmount, verticalAmount));
+        // Иначе колесо над выдачей поиска доезжало и до панели под ней.
+        for (int i = componentsList.size() - 1; i >= 0; i--) {
+            if (componentsList.get(i).mouseScrolled(renderMouseX, renderMouseY, horizontalAmount, verticalAmount)) {
+                return true;
+            }
+        }
         return super.mouseScrolled(renderMouseX, renderMouseY, horizontalAmount, verticalAmount);
     }
 }

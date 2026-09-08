@@ -27,6 +27,7 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.ChatScreen;
 import net.minecraft.client.network.AbstractClientPlayerEntity;
 import net.minecraft.client.render.entity.state.EntityRenderState;
+import net.minecraft.client.render.entity.state.PlayerEntityRenderState;
 import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EquipmentSlot;
@@ -116,8 +117,9 @@ public class NameTags extends Module {
 
     @Subscribe
     public void onRenderLabels(RenderEvent.RenderLabelsEvent<? extends Entity, ? extends EntityRenderState> renderLabelsEvent) {
-        EntityRenderState state = renderLabelsEvent.getState();
-        if (state instanceof net.minecraft.client.render.entity.state.ArmorStandEntityRenderState) return;
+        // Гасим только ники игроков: свои мы уже рисуем сами. Таблички-голограммы,
+        // стойки брони и подписи мобов рисует ваниль — их не трогаем.
+        if (!(renderLabelsEvent.getState() instanceof PlayerEntityRenderState)) return;
         renderLabelsEvent.cancelled();
     }
 

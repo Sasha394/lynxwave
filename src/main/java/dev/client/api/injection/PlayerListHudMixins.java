@@ -5,6 +5,7 @@ import dev.client.LynxWave;
 import dev.client.api.nullcry.helper.client.irc.ClientLabelRegistry;
 import dev.client.api.nullcry.render.ColorUtils;
 import dev.client.modules.core.misc.IRC;
+import dev.client.modules.core.render.Beautifully;
 import dev.client.modules.core.render.ExtraTab;
 import dev.client.modules.core.render.Interface;
 import net.minecraft.client.MinecraftClient;
@@ -136,8 +137,12 @@ public abstract class PlayerListHudMixins {
         int n = list.size();
         int o = n;
 
+        // Beautifully «Свои колонки таба»: поднимаем предел строк в колонке,
+        // чтобы список разложился на нужное игроку число колонок.
+        int rowLimit = Beautifully.tabRowLimit(n, 20);
+
         int p;
-        for (p = 1; o > 20; o = (n + p - 1) / p) {
+        for (p = 1; o > rowLimit; o = (n + p - 1) / p) {
             ++p;
         }
 

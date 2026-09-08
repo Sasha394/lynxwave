@@ -4,13 +4,18 @@ import dev.client.api.nullcry.events.EventManager;
 import dev.client.api.nullcry.events.core.other.CameraClipEvent;
 import dev.client.api.nullcry.helper.entity.CameraOverriddenEntity;
 import dev.client.modules.core.movement.freelook.FreeLookState;
+import dev.client.modules.core.render.Beautifully;
 import dev.client.modules.core.render.NoRender;
+import dev.client.modules.core.render.beautifully.AnimatedValue;
+import dev.client.modules.core.render.beautifully.Easing;
 import dev.client.modules.core.render.SmoothCamera;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.Camera;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Shadow;
@@ -35,6 +40,28 @@ public abstract class CameraMixins {
     private Vec3d pos;
 
     @Shadow private Entity focusedEntity;
+
+    @Shadow
+    protected abstract void setPos(Vec3d pos);
+
+    @Shadow
+    protected abstract void moveBy(float x, float y, float z);
+
+    @Shadow
+    private float clipToSpace(float distance) {
+        throw new AssertionError();
+    }
+
+    @Shadow
+    private boolean thirdPerson;
+    @Shadow
+    private float cameraY;
+    @Shadow
+    private float lastCameraY;
+    @Shadow
+    private float pitch;
+    @Shadow
+    private float yaw;
 
     @Unique
     private float smoothYaw;
@@ -96,5 +123,51 @@ public abstract class CameraMixins {
 
         if (NoRender.INSTANCE.isEnabled() && NoRender.INSTANCE.mode.isSelected("Clip"))
             cir.setReturnValue(3.5f);
+    }
+
+    /**
+     * Beautifully «Плавный F5»: камера уезжает в третье лицо и возвращается обратно
+     * по кривой, вместо мгновенного скачка.
+     */
+    @Inject(method = "update", at = @At("TAIL"))
+    private void lynx$beautifullyCamera(World area, Entity focusedEntity, boolean thirdPerson, boolean inverseView, float tickDelta, CallbackInfo ci) {
+        Beautifully module = Beautifully.ready();
+        if (module == null || focusedEntity == null) return;
+
+        AnimatedValue third = module.getThirdPersonAnimation();
+        AnimatedValue inverse = module.getInverseViewAnimation();
+
+        if (!Beautifully.smoothF5()) {
+            third.snap(thirdPerson ? 1.0f : 0.0f);
+            inverse.snap(thirdPerson && inverseView ? 1.0f : 0.0f);
+            return;
+        }
+
+        third.setEasing(thirdPerson ? Easing.F5_IN : Easing.F5_OUT);
+        third.setDuration(400L);
+        inverse.setEasing(Easing.F5_INVERSE);
+
+        float thirdProgress = third.update(thirdPerson ? 1.0f : 0.0f);
+        float inverseProgress = inverse.update(thirdPerson && inverseView ? 1.0f : 0.0f);
+        if (third.isFinished() && inverse.isFinished()) return;
+
+        double x = MathHelper.lerp(tickDelta, focusedEntity.lastX, focusedEntity.getX());
+        double y = MathHelper.lerp(tickDelta, focusedEntity.lastY, focusedEntity.getY())
+                + MathHelper.lerp(tickDelta, this.lastCameraY, this.cameraY);
+        double z = MathHelper.lerp(tickDelta, focusedEntity.lastZ, focusedEntity.getZ());
+        this.setPos(new Vec3d(x, y, z));
+        // Пока модель ещё видна, камера должна считаться внешней, иначе руки мигнут.
+        this.thirdPerson = thirdPerson || thirdProgress >= 0.1f;
+
+        if (thirdProgress <= 0.001f) return;
+
+        this.setRotation(focusedEntity.getYaw(tickDelta), focusedEntity.getPitch(tickDelta));
+        if (inverseView || inverseProgress > 0.001f) {
+            float turn = inverseView ? 180.0f * inverseProgress : -180.0f * inverseProgress;
+            this.setRotation(this.yaw + turn, MathHelper.lerp(inverse.get(), this.pitch, -this.pitch));
+        }
+
+        float scale = focusedEntity instanceof LivingEntity living ? living.getScale() : 1.0f;
+        this.moveBy(-this.clipToSpace(4.0f * scale * thirdProgress), 0.0f, 0.0f);
     }
 }

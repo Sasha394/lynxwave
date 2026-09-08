@@ -17,6 +17,7 @@ import dev.client.api.nullcry.uiClient.clickGui.api.Helper;
 import dev.client.api.nullcry.uiClient.clickGui.api.component.Component;
 import dev.client.api.nullcry.uiClient.clickGui.api.component.ComponentLayer;
 import dev.client.api.nullcry.uiClient.clickGui.api.setting.SettingComponent;
+import dev.client.api.nullcry.uiClient.clickGui.components.search.SearchSpotlight;
 import dev.client.modules.core.render.Interface;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -236,6 +237,9 @@ public class ModuleComponent extends Component {
             ScissorUtil.disable();
         }
 
+        // Поиск попросил показать настройку этого модуля — раскрываем его сами.
+        if (SearchSpotlight.shouldOpenSettings(module)) settingsOpened = true;
+
         settingsVisibility = MathHelper.lerp(0.22f, settingsVisibility, settingsOpened ? 1f : 0f);
         if (Math.abs(settingsVisibility - (settingsOpened ? 1f : 0f)) <= 0.01f) {
             settingsVisibility = settingsOpened ? 1f : 0f;
@@ -349,9 +353,17 @@ public class ModuleComponent extends Component {
                     .forEach(e -> {
                         e.setGlobalAlpha(settingsAlpha);
                         e.size(settingsWidth, e.getHeight());
+                        if (SearchSpotlight.highlightsSetting(e.getSetting())) {
+                            drawSpotlight(matrix, getX() + 4f, getY() + headerHeight + 2f + offset.get(), getWidth() - 8f, e.getHeight() + 4f);
+                        }
+
                         e.position(settingsX, getY() + headerHeight + 4f + offset.get()).render(context, mouseX, mouseY, delta);
                         offset.set(offset.get() + e.getHeight() + 5f);
                     });
+        }
+
+        if (SearchSpotlight.highlightsModule(module)) {
+            drawSpotlight(matrix, getX() + 4f, getY(), getWidth() - 8f, headerHeight);
         }
 
         boolean headerHovered = MouseClick.isClick(mouseX, mouseY, getX() + 2f, getY(), getWidth() - 4f, headerHeight);
@@ -481,5 +493,18 @@ public class ModuleComponent extends Component {
     public boolean charTyped(char chr, int modifiers) {
         components.forEach(e -> e.charTyped(chr, modifiers));
         return super.charTyped(chr, modifiers);
+    }
+
+    /** Подсветка строки, на которую увёл поиск: держится 1.6 с и гаснет. */
+    private void drawSpotlight(Matrix4f matrix, float x, float y, float width, float height) {
+        float alpha = SearchSpotlight.alpha() * globalAlpha;
+        if (alpha <= 0.01f) return;
+
+        Builder.RECTANGLE_BUILDER
+                .size(new SizeState(width, height))
+                .color(new QuadColorState(ColorUtils.setAlpha(Interface.INSTANCE.getMainColor(), (int) (46 * alpha))))
+                .radius(new QuadRadiusState(4f))
+                .build()
+                .render(matrix, x, y);
     }
 }

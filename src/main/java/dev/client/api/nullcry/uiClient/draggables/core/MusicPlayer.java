@@ -97,6 +97,9 @@ public class MusicPlayer implements IHelper, ClientApi, SettingProvider {
     private volatile boolean artworkReady;
     private volatile boolean artworkLoading;
     private volatile String artworkTrackKey = "";
+    /** Когда можно повторить неудавшуюся загрузку обложки; 0 — повтор не нужен. */
+    private volatile long artworkRetryAt;
+    private static final long ARTWORK_RETRY_DELAY_MS = 15_000L;
 
     private static final float PANEL_W = 145f;
     private static final float PANEL_H = 45f;
@@ -615,6 +618,7 @@ public class MusicPlayer implements IHelper, ClientApi, SettingProvider {
             artworkTrackKey = trackKey;
             artworkReady = false;
             artworkLoading = false;
+            artworkRetryAt = 0L;
         }
 
         if (embeddedArtwork != null && embeddedArtwork.length > 0 && (trackChanged || sourceArtworkChanged || (!artworkReady && !artworkLoading))) {
@@ -623,14 +627,23 @@ public class MusicPlayer implements IHelper, ClientApi, SettingProvider {
             return;
         }
 
-        if (trackChanged) {
+        // Обложку у сессии дают не все плееры, поэтому докачиваем её из сети.
+        // Сеть может отвалиться — тогда пробуем ещё раз, но не чаще раза в 15 секунд.
+        boolean retryDue = !artworkReady && !artworkLoading
+                && artworkRetryAt > 0L && System.currentTimeMillis() >= artworkRetryAt;
+
+        if (trackChanged || retryDue) {
             artworkLoading = true;
+            artworkRetryAt = 0L;
             AlbumArtClient.fetchArtworkAsync(info.getTitle(), info.getArtist())
                     .thenAccept(artwork -> {
-                        if (artwork.length > 0 && trackKey.equals(artworkTrackKey) && !artworkReady) {
+                        if (!trackKey.equals(artworkTrackKey)) return;
+
+                        if (artwork.length > 0 && !artworkReady) {
                             registerTexture(artId, artwork, trackKey);
-                        } else if (trackKey.equals(artworkTrackKey)) {
+                        } else {
                             artworkLoading = false;
+                            artworkRetryAt = System.currentTimeMillis() + ARTWORK_RETRY_DELAY_MS;
                         }
                     });
         }
@@ -642,27 +655,44 @@ public class MusicPlayer implements IHelper, ClientApi, SettingProvider {
 
     private void registerTexture(Identifier id, byte[] content, String trackKey) {
         if (content == null || content.length == 0) return;
+
+        NativeImage image;
         try {
-            NativeImageBackedTexture texture = decodeArtwork(content, id);
-            mc.execute(() -> {
-                if (!trackKey.equals(artworkTrackKey)) {
-                    texture.close();
-                    return;
-                }
-                mc.getTextureManager().registerTexture(id, texture);
-                artworkReady = true;
-                artworkLoading = false;
-            });
+            image = decodeArtwork(content);
         } catch (Exception ignored) {
             if (trackKey.equals(artworkTrackKey)) artworkLoading = false;
+            return;
         }
+
+        // NativeImageBackedTexture прямо в конструкторе создаёт GPU-текстуру и заливает
+        // её через command encoder, а это можно делать только с рендер-потока. Раньше
+        // текстура собиралась здесь же, в потоке загрузки, падала с исключением — и
+        // обложка не появлялась никогда. Декодирование остаётся вне рендер-потока.
+        mc.execute(() -> {
+            if (!trackKey.equals(artworkTrackKey)) {
+                image.close();
+                return;
+            }
+
+            try {
+                NativeImageBackedTexture texture =
+                        new NativeImageBackedTexture(() -> "lynxwave-music-art/" + id, image);
+                mc.getTextureManager().registerTexture(id, texture);
+                artworkReady = true;
+            } catch (Exception ignored) {
+                image.close();
+            } finally {
+                artworkLoading = false;
+            }
+        });
     }
 
-    private static NativeImageBackedTexture decodeArtwork(byte[] content, Identifier id) throws IOException {
+    /** Декодирование обложки в CPU-картинку: GPU здесь не участвует, поток любой. */
+    private static NativeImage decodeArtwork(byte[] content) throws IOException {
         try {
             ByteBuffer data = BufferUtils.createByteBuffer(content.length).put(content);
             data.flip();
-            return new NativeImageBackedTexture(() -> "lynxwave-music-art/" + id, NativeImage.read(data));
+            return NativeImage.read(data);
         } catch (Exception ignored) {
         }
 
@@ -675,6 +705,6 @@ public class MusicPlayer implements IHelper, ClientApi, SettingProvider {
                 image.setColorArgb(x, y, bufferedImage.getRGB(x, y));
             }
         }
-        return new NativeImageBackedTexture(() -> "lynxwave-music-art/" + id, image);
+        return image;
     }
 }

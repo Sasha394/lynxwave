@@ -130,6 +130,8 @@ public final class ModuleManager extends CopyOnWriteArrayList<Module> implements
                 new PVPAI(),
                 new Zoom(),
                 new AspectRatio(),
+                new FrameSync(),
+                new Beautifully(),
                 new CustomWorld(),
                 new Rain(),
                 new FullBright(),

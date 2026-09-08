@@ -182,7 +182,7 @@ public class LynxWave implements ModInitializer, ClientApi {
     }
 
     void initClientServices() {
-        clientInfo = new ClientInfo("LynxWave", "1.6.1", "/assets/lynxwave/", mode == BuildType.BUILD ? ClientInfo.BuildType.Beta : ClientInfo.BuildType.Private);
+        clientInfo = new ClientInfo("LynxWave", "1.6.8", "/assets/lynxwave/", mode == BuildType.BUILD ? ClientInfo.BuildType.Beta : ClientInfo.BuildType.Private);
         userProfile = ProfileType.Developer.createProfile();
         discordManager = new DiscordManager();
         discordManager.start();

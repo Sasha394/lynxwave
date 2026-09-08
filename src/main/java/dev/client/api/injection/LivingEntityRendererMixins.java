@@ -1,18 +1,25 @@
 package dev.client.api.injection;
 
+import com.llamalad7.mixinextras.injector.ModifyReturnValue;
+import dev.client.api.nullcry.helper.entity.EntityRenderStateOwner;
 import dev.client.api.nullcry.ClientApi;
+import dev.client.modules.core.render.Beautifully;
 import dev.client.modules.core.combat.killaura.rotation.RotationController;
 import dev.client.modules.core.render.SeeInvisible;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
 import net.minecraft.client.render.command.OrderedRenderCommandQueue;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.client.render.RenderLayer;
+import net.minecraft.client.render.RenderLayers;
 import net.minecraft.client.render.entity.LivingEntityRenderer;
 import net.minecraft.client.render.entity.state.LivingEntityRenderState;
 import net.minecraft.client.render.state.CameraRenderState;
 import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.math.ColorHelper;
 import net.minecraft.util.math.MathHelper;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -22,6 +29,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(LivingEntityRenderer.class)
 public abstract class LivingEntityRendererMixins implements ClientApi {
     @Unique private static final ThreadLocal<LivingEntityRenderState> LIVING_RENDER_STATE = new ThreadLocal<>();
+
+    @Shadow public abstract Identifier getTexture(LivingEntityRenderState state);
 
     @Inject(method = "render(Lnet/minecraft/client/render/entity/state/LivingEntityRenderState;Lnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/command/OrderedRenderCommandQueue;Lnet/minecraft/client/render/state/CameraRenderState;)V", at = @At("HEAD"))
     private void onRenderHead(LivingEntityRenderState renderState, MatrixStack matrices, OrderedRenderCommandQueue queue, CameraRenderState cameraRenderState, CallbackInfo ci) {
@@ -71,5 +80,27 @@ public abstract class LivingEntityRendererMixins implements ClientApi {
                 }
             }
         }
+    }
+
+    @Unique
+    private boolean lynx$fadingLocalPlayer(LivingEntityRenderState state) {
+        return state != null
+                && Beautifully.playerFading()
+                && ((EntityRenderStateOwner) state).lynx$getEntity() == mc.player;
+    }
+
+    // Beautifully «Плавный F5»: пока камера отъезжает, модель игрока проявляется.
+    @ModifyArg(method = "render(Lnet/minecraft/client/render/entity/state/LivingEntityRenderState;Lnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/command/OrderedRenderCommandQueue;Lnet/minecraft/client/render/state/CameraRenderState;)V", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/command/OrderedRenderCommandQueue;submitModel(Lnet/minecraft/client/model/Model;Ljava/lang/Object;Lnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/RenderLayer;IIILnet/minecraft/client/texture/Sprite;ILnet/minecraft/client/render/command/ModelCommandRenderer$CrumblingOverlayCommand;)V"), index = 6)
+    private int lynx$beautifullyFadeColor(int color) {
+        return this.lynx$fadingLocalPlayer(LIVING_RENDER_STATE.get()) ? Beautifully.applyFade(color) : color;
+    }
+
+    // Слой cutout не умеет в полупрозрачность — на время перехода берём translucent.
+    @ModifyReturnValue(method = "getRenderLayer", at = @At("RETURN"))
+    private RenderLayer lynx$beautifullyRenderLayer(RenderLayer original, LivingEntityRenderState state, boolean showBody, boolean translucent, boolean showOutline) {
+        if (original != null && this.lynx$fadingLocalPlayer(state)) {
+            return RenderLayers.itemEntityTranslucentCull(this.getTexture(state));
+        }
+        return original;
     }
 }

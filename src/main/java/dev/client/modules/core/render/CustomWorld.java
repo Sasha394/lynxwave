@@ -38,19 +38,28 @@ public class CustomWorld extends Module {
             .putVec4().putVec4().putVec4().putVec4().putVec4()
             .putVec4().putVec4().putVec4().putVec4().putVec4()
             .get();
-    private static final RenderPipeline SKY_SHADER_PIPELINE = RenderPipelines.register(
-            RenderPipeline.builder(RenderPipelines.TRANSFORMS_AND_PROJECTION_SNIPPET)
-                    .withLocation(Identifier.of("lynxwave", "pipeline/world/custom_sky"))
-                    .withVertexShader(Identifier.of("lynxwave", "core/custom_sky"))
-                    .withFragmentShader(Identifier.of("lynxwave", "core/custom_sky"))
-                    .withUniform("SkyShaderData", UniformType.UNIFORM_BUFFER)
-                    .withBlend(BlendFunction.TRANSLUCENT)
-                    .withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST)
-                    .withDepthWrite(false)
-                    .withCull(false)
-                    .withVertexFormat(VertexFormats.EMPTY, VertexFormat.DrawMode.TRIANGLES)
-                    .build()
-    );
+    private static final RenderPipeline SKY_CAUSTIC_PIPELINE = createSkyPipeline("caustic");
+    private static final RenderPipeline SKY_GALAXY_PIPELINE = createSkyPipeline("galaxy");
+    private static final RenderPipeline SKY_NEBULA_PIPELINE = createSkyPipeline("nebula");
+    private static final RenderPipeline SKY_RADIANT_PIPELINE = createSkyPipeline("radiant");
+    private static final RenderPipeline SKY_SPACE_PIPELINE = createSkyPipeline("space");
+    private static final RenderPipeline SKY_SUNSET_PIPELINE = createSkyPipeline("sunset");
+
+    private static RenderPipeline createSkyPipeline(String shaderName) {
+        return RenderPipelines.register(
+                RenderPipeline.builder(RenderPipelines.TRANSFORMS_AND_PROJECTION_SNIPPET)
+                        .withLocation(Identifier.of("lynxwave", "pipeline/world/custom_sky_" + shaderName))
+                        .withVertexShader(Identifier.of("lynxwave", "core/custom_sky"))
+                        .withFragmentShader(Identifier.of("lynxwave", "core/custom_sky_" + shaderName))
+                        .withUniform("SkyShaderData", UniformType.UNIFORM_BUFFER)
+                        .withBlend(BlendFunction.TRANSLUCENT)
+                        .withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST)
+                        .withDepthWrite(false)
+                        .withCull(false)
+                        .withVertexFormat(VertexFormats.EMPTY, VertexFormat.DrawMode.TRIANGLES)
+                        .build()
+        );
+    }
 
     public CustomWorld() {
         super("CustomWorld", ModuleCategory.Render, "Позволяет изменять время суток и туман");
@@ -62,6 +71,10 @@ public class CustomWorld extends Module {
     public ModeElement skyMode = new ModeElement("Небо", () -> true)
             .set("Обычный", "Шейдер")
             .defaultValue("Обычный")
+            .register(this);
+    public ModeElement skyShader = new ModeElement("Шейдер", this::isShaderSky)
+            .set("Caustic", "Galaxy", "Nebula", "Radiant", "Space", "Sunset")
+            .defaultValue("Caustic")
             .register(this);
     private final Slider skyIntensity = new Slider("Интенсивность неба", this::isShaderSky)
             .set(0.1f, 2.0f, 0.05f).defaultValue(1.0f).register(this);
@@ -95,11 +108,22 @@ public class CustomWorld extends Module {
                      framebuffer.getColorAttachmentView(),
                      OptionalInt.empty()
              )) {
-            pass.setPipeline(SKY_SHADER_PIPELINE);
+            pass.setPipeline(getSkyPipeline());
             RenderSystem.bindDefaultUniforms(pass);
             pass.setUniform("SkyShaderData", shaderData);
             pass.draw(0, 3);
         }
+    }
+
+    private RenderPipeline getSkyPipeline() {
+        return switch (skyShader.getValue()) {
+            case "Galaxy" -> SKY_GALAXY_PIPELINE;
+            case "Nebula" -> SKY_NEBULA_PIPELINE;
+            case "Radiant" -> SKY_RADIANT_PIPELINE;
+            case "Space" -> SKY_SPACE_PIPELINE;
+            case "Sunset" -> SKY_SUNSET_PIPELINE;
+            default -> SKY_CAUSTIC_PIPELINE;
+        };
     }
 
     private GpuBuffer createSkyShaderData(Framebuffer framebuffer, Camera camera) {

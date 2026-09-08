@@ -12,7 +12,9 @@ import dev.client.api.nullcry.render.core.builders.states.QuadColorState;
 import dev.client.api.nullcry.render.core.builders.states.QuadRadiusState;
 import dev.client.api.nullcry.render.core.builders.states.SizeState;
 import dev.client.api.nullcry.uiClient.draggables.settings.DraggableSettingsPanel;
+import dev.client.modules.core.render.Beautifully;
 import dev.client.modules.core.render.Chat;
+import dev.client.modules.core.render.beautifully.Easing;
 import dev.client.modules.core.render.ViewModel;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.Click;
@@ -362,5 +364,37 @@ public abstract class ChatScreenMixins extends Screen {
     @Unique
     private boolean isHoveredReset(int mouseX, int mouseY) {
         return MouseClick.isClick(mouseX, mouseY, resetBoxX, buttonBoxY, resetBoxW, buttonBoxH);
+    }
+
+    // ---- Beautifully «Анимация чата»: выезд полосы ввода ----
+
+    @Unique private long lynx$openTime;
+    @Unique private boolean lynx$barShifted;
+
+    @Inject(method = "init", at = @At("HEAD"))
+    private void lynx$startOpenAnimation(CallbackInfo ci) {
+        this.lynx$openTime = System.currentTimeMillis();
+    }
+
+    @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/hud/ChatHud;render(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/client/font/TextRenderer;IIIZZ)V", shift = At.Shift.AFTER))
+    private void lynx$pushInputAnimation(DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+        this.lynx$barShifted = false;
+        if (!Beautifully.chatAnimation()) return;
+
+        float progress = (System.currentTimeMillis() - this.lynx$openTime) / 200.0f;
+        if (progress >= 1.0f || progress < 0.0f) return;
+
+        float eased = Easing.CUBIC_OUT.ease(progress, 0.0f, 1.0f, 1.0f);
+        context.getMatrices().pushMatrix();
+        context.getMatrices().translate(0.0f, (1.0f - eased) * 16.0f);
+        this.lynx$barShifted = true;
+    }
+
+    @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/screen/ChatInputSuggestor;render(Lnet/minecraft/client/gui/DrawContext;II)V", shift = At.Shift.AFTER))
+    private void lynx$popInputAnimation(DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+        if (!this.lynx$barShifted) return;
+
+        this.lynx$barShifted = false;
+        context.getMatrices().popMatrix();
     }
 }

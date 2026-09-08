@@ -3,6 +3,7 @@ package dev.client.api.nullcry.uiClient.clickGui.components.panel;
 import dev.client.api.nullcry.MouseClick;
 import dev.client.api.nullcry.modules.ModuleCategory;
 import dev.client.api.nullcry.uiClient.clickGui.api.component.Component;
+import dev.client.api.nullcry.uiClient.clickGui.components.search.SearchRanker;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.util.math.MathHelper;
 
@@ -81,6 +82,8 @@ public class PanelsLayer extends Component {
     }
 
     public void updateFilter(String searchText) {
+        boolean searching = !SearchRanker.normalize(searchText).isEmpty();
+
         componentsList.clear();
         Arrays.stream(ModuleCategory.values())
                 .map(category -> {
@@ -88,6 +91,8 @@ public class PanelsLayer extends Component {
                     panel.updateFilter(searchText);
                     return panel;
                 })
+                // При активном поиске пустые категории не занимают место — выдача остаётся плотной.
+                .filter(panel -> !searching || panel.hasModules())
                 .forEach(componentsList::add);
     }
 
