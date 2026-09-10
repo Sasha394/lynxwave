@@ -60,7 +60,7 @@ public class IRC extends Module {
             .defaultValue(false)
             .register(this);
 
-    String SERVER_URI = "ws://31.76.11.89:8080";
+    String SERVER_URI = "ws://2.26.81.84:8080";
     long MARKER_LIFETIME_MS = 15000L;
     double MARKER_RAY_DISTANCE = 120.0D;
 

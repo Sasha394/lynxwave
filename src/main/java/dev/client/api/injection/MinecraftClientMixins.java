@@ -2,7 +2,6 @@ package dev.client.api.injection;
 
 import dev.client.LynxWave;
 import dev.client.api.nullcry.events.EventManager;
-import dev.client.api.nullcry.helper.client.window.WindowTheme;
 import dev.client.api.nullcry.events.core.game.GameUpdateEvent;
 import dev.client.api.nullcry.events.core.game.TickEvent;
 import dev.client.api.nullcry.events.core.world.WorldChangeEvent;
@@ -40,7 +39,6 @@ public abstract class MinecraftClientMixins {
 
     @Inject(method = "tick", at = @At("HEAD"))
     public void onTick(CallbackInfo ci) {
-        WindowTheme.applyOnce();
         EventManager.call(new TickEvent());
     }
 

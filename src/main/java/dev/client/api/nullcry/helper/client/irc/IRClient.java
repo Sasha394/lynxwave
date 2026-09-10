@@ -79,10 +79,35 @@ public class IRClient extends WebSocketClient {
     private final List<OnlineUser> friends = new ArrayList<>();
     private final List<String> incomingFriendRequests = new ArrayList<>();
     private final java.util.Map<String, java.util.Deque<DmEntry>> dmLogs = new java.util.concurrent.ConcurrentHashMap<>();
+    /** Lower-cased DM key to the nickname's display casing. */
+    private final java.util.Map<String, String> dmPeerNames = new java.util.concurrent.ConcurrentHashMap<>();
     private static final int DM_LIMIT = 100;
-    public record DmEntry(long time, boolean self, String message) {}
+    /** One direct message. Reply fields mirror {@link ChatLogEntry}; null when not a reply. */
+    public record DmEntry(long time, boolean self, String message, String replyAuthor, String replyText) {
+        public DmEntry(long time, boolean self, String message) {
+            this(time, self, message, null, null);
+        }
 
-    public record ChatLogEntry(long time, String author, String client, String prefix, String message) {}
+        public boolean isReply() {
+            return replyAuthor != null && !replyAuthor.isBlank() && replyText != null;
+        }
+    }
+
+    /**
+     * One line of the global chat. {@code replyAuthor}/{@code replyText} are the
+     * quoted message this one answers, or null when it is not a reply — the
+     * server forwards them untouched, so older peers just omit them.
+     */
+    public record ChatLogEntry(long time, String author, String client, String prefix, String message,
+                               String replyAuthor, String replyText) {
+        public ChatLogEntry(long time, String author, String client, String prefix, String message) {
+            this(time, author, client, prefix, message, null, null);
+        }
+
+        public boolean isReply() {
+            return replyAuthor != null && !replyAuthor.isBlank() && replyText != null;
+        }
+    }
     private static final java.util.Deque<ChatLogEntry> CHAT_LOG = new java.util.concurrent.ConcurrentLinkedDeque<>();
     private static final int CHAT_LOG_LIMIT = 200;
     public static java.util.List<ChatLogEntry> getChatLog() {
@@ -505,7 +530,10 @@ public class IRClient extends WebSocketClient {
                         handlePartyPayload(author, client, prefix, content.substring(PARTY_EVENT_PREFIX.length()));
                         return;
                     }
-                    CHAT_LOG.addLast(new ChatLogEntry(System.currentTimeMillis(), author, client, prefix, content));
+                    String replyAuthor = optString(json, "reply_author");
+                    String replyText = optString(json, "reply_text");
+                    CHAT_LOG.addLast(new ChatLogEntry(System.currentTimeMillis(), author, client, prefix, content,
+                            replyAuthor, replyText));
                     while (CHAT_LOG.size() > CHAT_LOG_LIMIT) CHAT_LOG.pollFirst();
                     notifyText(author, content);
                     currentMessageClientLabel = client;
@@ -727,7 +755,8 @@ public class IRClient extends WebSocketClient {
                     if (!json.has("message") || !json.has("author")) return;
                     String pmContent = json.get("message").getAsString();
                     String pmAuthor = json.get("author").getAsString();
-                    recordDm(pmAuthor, false, pmContent);
+                    recordDm(pmAuthor, false, pmContent,
+                            optString(json, "reply_author"), optString(json, "reply_text"));
                     print(getChatPrefix() + "${aqua}[PM] ${yellow}" + pmAuthor + "${gray}: ${white}" + pmContent, pmAuthor, pmContent, false);
                     notifyPrivate(pmAuthor, pmContent);
                     break;
@@ -1317,7 +1346,32 @@ public class IRClient extends WebSocketClient {
         return null;
     }
 
+    /** Collapses a quoted message to a single capped line for the wire. */
+    private static String flattenQuote(String text) {
+        String flat = text.replace('\n', ' ').replace('\r', ' ').trim();
+        return flat.length() > 160 ? flat.substring(0, 160) : flat;
+    }
+
+    /** Reads an optional string field, treating absent/null/blank alike as null. */
+    private static String optString(JsonObject json, String key) {
+        if (json == null || !json.has(key) || json.get(key).isJsonNull()) return null;
+        try {
+            String value = json.get(key).getAsString();
+            return value == null || value.isBlank() ? null : value;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     public void sendMessage(String message) {
+        sendMessage(message, null, null);
+    }
+
+    /**
+     * Sends a chat message, optionally quoting {@code replyAuthor}'s {@code replyText}.
+     * The quote travels as two extra fields the server forwards verbatim.
+     */
+    public void sendMessage(String message, String replyAuthor, String replyText) {
         System.out.println("[IRC] sendMessage called: " + message);
         if (!this.isOpen()) {
             print(getChatPrefix() + "${red} Не подключено к серверу IRC", "", "", false);
@@ -1346,6 +1400,10 @@ public class IRClient extends WebSocketClient {
         payload.addProperty("api_key", API_KEY);
         payload.addProperty("client_version", CLIENT_VERSION);
         payload.addProperty("prefix", currentPrefix);
+        if (replyAuthor != null && !replyAuthor.isBlank() && replyText != null && !replyText.isBlank()) {
+            payload.addProperty("reply_author", replyAuthor);
+            payload.addProperty("reply_text", flattenQuote(replyText));
+        }
         String serverName = resolveCurrentServerName();
         if (serverName != null && !serverName.isBlank()) {
             payload.addProperty("server", serverName);
@@ -1361,6 +1419,11 @@ public class IRClient extends WebSocketClient {
     }
 
     public void sendPrivateMessage(String targetNickname, String message) {
+        sendPrivateMessage(targetNickname, message, null, null);
+    }
+
+    /** Sends a DM, optionally quoting {@code replyAuthor}'s {@code replyText}. */
+    public void sendPrivateMessage(String targetNickname, String message, String replyAuthor, String replyText) {
         if (!this.isOpen()) {
             print(getChatPrefix() + "${red} Нет подключения к серверу!", "", "", false);
             return;
@@ -1376,8 +1439,14 @@ public class IRClient extends WebSocketClient {
         payload.addProperty("author", currentNickname != null ? currentNickname : SENDER);
         payload.addProperty("api_key", API_KEY);
         payload.addProperty("client_version", CLIENT_VERSION);
+        boolean quoting = replyAuthor != null && !replyAuthor.isBlank() && replyText != null && !replyText.isBlank();
+        String quote = quoting ? flattenQuote(replyText) : null;
+        if (quoting) {
+            payload.addProperty("reply_author", replyAuthor);
+            payload.addProperty("reply_text", quote);
+        }
         this.send(cypher(payload.toString()));
-        recordDm(targetNickname, true, message);
+        recordDm(targetNickname, true, message, quoting ? replyAuthor : null, quote);
     }
 
     public void register(String username, String password) {
@@ -1763,13 +1832,38 @@ public class IRClient extends WebSocketClient {
         return nick == null ? "" : nick.toLowerCase();
     }
 
+    /**
+     * Nicknames this session has exchanged DMs with, most recently active first.
+     * Casing is whatever the peer last presented, so it is display-ready.
+     */
+    public List<String> getDmPeers() {
+        List<String> keys = new ArrayList<>(dmLogs.keySet());
+        keys.sort((a, b) -> Long.compare(lastDmTime(b), lastDmTime(a)));
+        List<String> out = new ArrayList<>(keys.size());
+        for (String key : keys) {
+            out.add(dmPeerNames.getOrDefault(key, key));
+        }
+        return out;
+    }
+
+    private long lastDmTime(String key) {
+        java.util.Deque<DmEntry> log = dmLogs.get(key);
+        DmEntry last = log == null ? null : log.peekLast();
+        return last == null ? 0L : last.time();
+    }
+
     private void recordDm(String nick, boolean self, String message) {
+        recordDm(nick, self, message, null, null);
+    }
+
+    private void recordDm(String nick, boolean self, String message, String replyAuthor, String replyText) {
         if (nick == null || nick.isBlank() || message == null) {
             return;
         }
+        dmPeerNames.put(dmKey(nick), nick);
         java.util.Deque<DmEntry> log = dmLogs.computeIfAbsent(dmKey(nick),
                 k -> new java.util.concurrent.ConcurrentLinkedDeque<>());
-        log.addLast(new DmEntry(System.currentTimeMillis(), self, message));
+        log.addLast(new DmEntry(System.currentTimeMillis(), self, message, replyAuthor, replyText));
         while (log.size() > DM_LIMIT) {
             log.pollFirst();
         }

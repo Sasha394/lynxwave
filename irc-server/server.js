@@ -3,9 +3,12 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || process.env.SERVER_PORT || 8080;
 const HOST = process.env.HOST || '0.0.0.0';
 const API_KEY = 'LynxWave_secret_key_1488';
+// Логины владельцев: получают админку автоматически при каждом входе.
+// Нижний регистр — ключи в users.json хранятся так же.
+const OWNERS = ['anon1mysxd'];
 const SERVER_VERSION = 2;
 const MIN_CLIENT_VERSION = 1;
 const XOR_KEY = (0x15 ^ 0x3) ^ 2;
@@ -67,6 +70,15 @@ function broadcast(payload, exclude = null) {
 
 function systemMessage(ws, message) {
     send(ws, { type: 'system', message });
+}
+
+// Normalises an untrusted optional string field to a trimmed, length-capped
+// single line, or null when it carries nothing usable.
+function trimField(value, maxLength) {
+    if (typeof value !== 'string') return null;
+    const flat = value.replace(/[\r\n]+/g, ' ').trim();
+    if (!flat) return null;
+    return flat.length > maxLength ? flat.slice(0, maxLength) : flat;
 }
 
 function roleOf(ws) {
@@ -159,7 +171,6 @@ wss.on('listening', () => {
 });
 
 wss.on('connection', (ws, req) => {
-    console.log(`[IRC] Connection from ${req.socket.remoteAddress}`);
     clients.add(ws);
 
     ws.author = null;
@@ -184,13 +195,12 @@ wss.on('connection', (ws, req) => {
             return;
         }
 
-        console.log('[IRC] RAW <-', text.slice(0, 200));
 
         let json;
         try {
             json = JSON.parse(text);
         } catch (e) {
-            console.warn('[IRC] Bad JSON:', text.slice(0, 200));
+            console.warn('[IRC] Bad JSON');
             return;
         }
 
@@ -338,8 +348,15 @@ function handleText(ws, json) {
         prefix: json.prefix || 'Default',
         server: json.server || null,
     };
+    // Reply metadata is opaque to the server — forwarded as-is so clients can
+    // render a quote bubble. Older clients simply ignore the extra fields.
+    const replyAuthor = trimField(json.reply_author, 32);
+    const replyText = trimField(json.reply_text, 160);
+    if (replyAuthor && replyText) {
+        payload.reply_author = replyAuthor;
+        payload.reply_text = replyText;
+    }
     broadcast(payload);
-    console.log(`[IRC] <${ws.nickname}> ${message}`);
 }
 
 function handlePrivateMessage(ws, json) {
@@ -349,10 +366,17 @@ function handlePrivateMessage(ws, json) {
     }
     const target = (json.target || '').toLowerCase();
     const message = (json.message || '').toString();
+    const dmPayload = { type: 'private_message', author: ws.nickname, message };
+    const dmReplyAuthor = trimField(json.reply_author, 32);
+    const dmReplyText = trimField(json.reply_text, 160);
+    if (dmReplyAuthor && dmReplyText) {
+        dmPayload.reply_author = dmReplyAuthor;
+        dmPayload.reply_text = dmReplyText;
+    }
     let delivered = false;
     for (const c of clients) {
         if (c.nickname && c.nickname.toLowerCase() === target) {
-            send(c, { type: 'private_message', author: ws.nickname, message });
+            send(c, dmPayload);
             delivered = true;
         }
     }
@@ -397,7 +421,19 @@ function handleLogin(ws, json) {
     finalizeLogin(ws, user);
 }
 
+// Владельцам из OWNERS права проставляются принудительно при каждом входе,
+// чтобы первого админа не приходилось бутстрапить правкой users.json вручную.
+function applyOwnerRights(user) {
+    if (!OWNERS.includes((user.username || '').toLowerCase())) return;
+    if (user.isAdmin && user.isModerator) return;
+    user.isAdmin = true;
+    user.isModerator = true;
+    saveUsers();
+    console.log(`[IRC] Owner rights granted to ${user.username}`);
+}
+
 function finalizeLogin(ws, user) {
+    applyOwnerRights(user);
     ws.username = user.username;
     ws.nickname = user.nickname;
     ws.isModerator = !!user.isModerator;
@@ -602,7 +638,59 @@ function handleModeratorCommand(ws, json) {
         systemMessage(ws, 'PERMISSION_DENIED: У вас нет прав модератора');
         return;
     }
-    send(ws, { type: 'moderator_response', success: true, message: `Команда "${json.action || 'unknown'}" принята (заглушка)` });
+
+    const command = json.command || json.action || 'unknown';
+
+    if (command === 'setadmin' || command === 'setmoderator') {
+        if (!ws.isAdmin) {
+            systemMessage(ws, 'PERMISSION_DENIED: Выдавать права может только администратор');
+            return;
+        }
+        const target = findUserByNickname(json.target);
+        if (!target) {
+            systemMessage(ws, `USER_NOT_FOUND: Пользователь "${json.target || ''}" не найден`);
+            return;
+        }
+        const targetKey = (target.username || '').toLowerCase();
+        const isAdminCmd = command === 'setadmin';
+        const value = isAdminCmd ? !!json.isAdmin : !!json.isModerator;
+
+        if (!value && OWNERS.includes(targetKey)) {
+            systemMessage(ws, 'PERMISSION_DENIED: Нельзя снять права с владельца сервера');
+            return;
+        }
+        if (!value && isAdminCmd && targetKey === (ws.username || '').toLowerCase()) {
+            systemMessage(ws, 'PERMISSION_DENIED: Нельзя снять админку с самого себя');
+            return;
+        }
+
+        if (isAdminCmd) {
+            target.isAdmin = value;
+            if (value) target.isModerator = true;
+        } else {
+            target.isModerator = value;
+        }
+        saveUsers();
+
+        // Применяем к живым сессиям, чтобы не требовать перезахода.
+        for (const sock of onlineSocketsByNickname(target.nickname || target.username)) {
+            sock.isAdmin = !!target.isAdmin;
+            sock.isModerator = !!target.isModerator;
+            systemMessage(sock, `ROLE_UPDATED: Ваши права изменены (admin=${sock.isAdmin}, moderator=${sock.isModerator})`);
+        }
+
+        const role = isAdminCmd ? 'администратора' : 'модератора';
+        console.log(`[IRC] ${ws.username} set ${command} ${value} for ${target.username}`);
+        send(ws, {
+            type: 'moderator_response',
+            success: true,
+            message: `${value ? 'Выданы' : 'Отозваны'} права ${role}: ${target.username}`,
+        });
+        broadcastOnlineUsers();
+        return;
+    }
+
+    send(ws, { type: 'moderator_response', success: true, message: `Команда "${command}" принята (заглушка)` });
 }
 
 function handleRaffleCommand(ws, json) {
